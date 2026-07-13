@@ -99,9 +99,9 @@ export default async function BlogDetailPage({ params }: { params: Promise<{ slu
 
           <div className="flex flex-wrap items-center gap-6 text-slate-600 font-medium">
             <div className="flex items-center gap-2.5">
-              {siteConfig.avatar_url || siteConfig.author_avatar ? (
+              {siteConfig.avt_url || siteConfig.avatar_url || siteConfig.author_avatar ? (
                 <img
-                  src={siteConfig.avatar_url || siteConfig.author_avatar}
+                  src={siteConfig.avt_url || siteConfig.avatar_url || siteConfig.author_avatar}
                   alt={blog.author}
                   className="w-10 h-10 rounded-full object-cover shadow-sm border border-slate-100"
                 />

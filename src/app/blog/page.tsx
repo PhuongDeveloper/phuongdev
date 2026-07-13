@@ -97,9 +97,9 @@ export default async function BlogPage() {
                     
                     <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-auto">
                       <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                        {siteConfig.avatar_url || siteConfig.author_avatar ? (
+                        {siteConfig.avt_url || siteConfig.avatar_url || siteConfig.author_avatar ? (
                           <img
-                            src={siteConfig.avatar_url || siteConfig.author_avatar}
+                            src={siteConfig.avt_url || siteConfig.avatar_url || siteConfig.author_avatar}
                             alt={blog.author}
                             className="w-8 h-8 rounded-full object-cover shadow-sm border border-slate-100"
                           />
