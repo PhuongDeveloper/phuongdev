@@ -7,6 +7,8 @@ import Link from 'next/link';
 import { Code2, MessageCircle, Mail, Heart, ArrowRight } from 'lucide-react';
 import { FaFacebook as Facebook, FaTelegram as Telegram } from 'react-icons/fa';
 
+import Image from 'next/image';
+
 interface FooterProps {
   siteConfig?: Record<string, string>;
 }
@@ -36,6 +38,8 @@ export default function Footer({ siteConfig = {} }: FooterProps) {
     { href: siteConfig['telegram_url'] || '#', icon: Telegram, label: 'Telegram' },
   ];
 
+  const logoUrl = siteConfig['logo_url'];
+
   return (
     <footer className="border-t border-slate-200 bg-white/50 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -43,12 +47,25 @@ export default function Footer({ siteConfig = {} }: FooterProps) {
           {/* Cột 1: Thông tin thương hiệu */}
           <div className="space-y-4">
             <Link href="/" className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-500">
-                <Code2 className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-lg font-bold text-slate-900">
-                Phuong<span className="gradient-text">Dev</span>
-              </span>
+              {logoUrl ? (
+                <div className="relative h-14 w-[200px] flex items-center">
+                  <Image
+                    src={logoUrl}
+                    alt="PhuongDev Logo"
+                    fill
+                    className="object-contain object-left"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="p-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-500">
+                    <Code2 className="w-5 h-5 text-white" />
+                  </div>
+                  <span className="text-lg font-bold text-slate-900">
+                    Phuong<span className="gradient-text">Dev</span>
+                  </span>
+                </>
+              )}
             </Link>
             <p className="text-sm text-slate-500 max-w-xs">
               {siteConfig['site_description'] ||

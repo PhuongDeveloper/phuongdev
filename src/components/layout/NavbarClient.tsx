@@ -74,7 +74,7 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group">
             {logoUrl ? (
-              <div className="relative h-10 w-[150px] flex items-center">
+              <div className="relative h-14 w-[200px] flex items-center">
                 <Image
                   src={logoUrl}
                   alt="PhuongDev Logo"
@@ -92,6 +92,7 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
                   <Code2 className="w-5 h-5 text-white" />
                 </motion.div>
                 <span className="text-lg font-bold text-slate-900 group-hover:text-rose-600 transition-colors">
+                  Phuong<span className="gradient-text">Dev</span>
                 </span>
               </>
             )}
