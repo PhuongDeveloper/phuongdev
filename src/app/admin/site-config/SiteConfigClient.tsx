@@ -152,17 +152,48 @@ export default function SiteConfigClient({ initialData }: SiteConfigClientProps)
             onChange={(e) => setKey(e.target.value)}
             disabled={!!editingItem} // Không cho sửa key nếu đang edit
             required
-            placeholder="Ví dụ: site_title"
-            helperText="Khóa chỉ được chứa chữ cái không dấu, số và dấu gạch dưới."
+            placeholder="Ví dụ: logo_url, site_title"
+            helperText="Gợi ý: Dùng key 'logo_url' để đổi logo, 'logo_text' để đổi chữ logo."
           />
 
-          <FormTextarea
-            label="Giá trị (Value)"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            required
-            placeholder="Nhập giá trị cấu hình..."
-          />
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Giá trị (Value)
+            </label>
+            {(key.includes('logo') || key.includes('image') || key.includes('avatar') || key.includes('banner')) && (
+              <div className="mb-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const formData = new FormData();
+                      formData.append('image', file);
+                      const res = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData,
+                      });
+                      if (!res.ok) throw new Error('Upload failed');
+                      const data = await res.json();
+                      setValue(data.url);
+                    } catch (error) {
+                      alert('Lỗi upload ảnh!');
+                    }
+                  }}
+                  className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                />
+              </div>
+            )}
+            <textarea
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-y min-h-[100px]"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              required
+              placeholder="Nhập giá trị cấu hình hoặc upload ảnh ở trên..."
+            />
+          </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
             <Button
