@@ -51,7 +51,7 @@ export default async function HomePage() {
   const { data: blogs } = await supabase
     .from('blogs')
     .select('*')
-    .eq('status', 'published')
+    .eq('is_published', true)
     .order('created_at', { ascending: false })
     .limit(3);
 

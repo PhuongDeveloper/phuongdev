@@ -15,6 +15,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     .from('blogs')
     .select('title, excerpt, cover_image')
     .eq('slug', resolvedParams.slug)
+    .eq('is_published', true)
     .single();
 
   if (!blog) return { title: 'Không tìm thấy bài viết' };
@@ -48,6 +49,7 @@ export default async function BlogDetailPage({ params }: { params: Promise<{ slu
     .from('blogs')
     .select('*')
     .eq('slug', resolvedParams.slug)
+    .eq('is_published', true)
     .single();
 
   if (!blog) {
@@ -97,9 +99,17 @@ export default async function BlogDetailPage({ params }: { params: Promise<{ slu
 
           <div className="flex flex-wrap items-center gap-6 text-slate-600 font-medium">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-rose-500 to-red-400 flex items-center justify-center text-white shadow-sm">
-                <User className="w-5 h-5" />
-              </div>
+              {siteConfig.avatar_url || siteConfig.author_avatar ? (
+                <img
+                  src={siteConfig.avatar_url || siteConfig.author_avatar}
+                  alt={blog.author}
+                  className="w-10 h-10 rounded-full object-cover shadow-sm border border-slate-100"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-rose-500 to-red-400 flex items-center justify-center text-white shadow-sm">
+                  <User className="w-5 h-5" />
+                </div>
+              )}
               <span className="text-slate-900">{blog.author}</span>
             </div>
             {blog.published_at && (

@@ -175,8 +175,11 @@ function extractArticleContent(html: string): string {
 function htmlToMarkdown(html: string): string {
   let text = html;
 
-  // Xoá script, style, nav, header, footer, aside
-  text = text.replace(/<(script|style|nav|header|footer|aside|iframe|form|noscript)[^>]*>[\s\S]*?<\/\1>/gi, '');
+  // 1. Xoá các khối HTML thường chứa nội dung rác bằng class/id (breadcrumb, social, tags, author, related)
+  text = text.replace(/<[^>]+(?:class|id)=["'][^"']*(?:social|share|breadcrumb|tags|author|related|comment|advert)[^"']*["'][^>]*>[\s\S]*?<\/[a-z]+>/gi, '');
+
+  // 2. Xoá các thẻ không cần thiết
+  text = text.replace(/<(script|style|nav|header|footer|aside|iframe|form|noscript|svg|button)[^>]*>[\s\S]*?<\/\1>/gi, '');
 
   // Xoá các comment HTML
   text = text.replace(/<!--[\s\S]*?-->/g, '');
@@ -196,8 +199,15 @@ function htmlToMarkdown(html: string): string {
   text = text.replace(/<img[^>]+alt=["']([^"']*?)["'][^>]*src=["']([^"']+)["'][^>]*\/?>/gi, '\n![$1]($2)\n');
   text = text.replace(/<img[^>]+src=["']([^"']+)["'][^>]*\/?>/gi, '\n![]($1)\n');
 
-  // Links
-  text = text.replace(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)');
+  // Links (Lọc link chia sẻ MXH và link rỗng)
+  text = text.replace(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (match, url, linkText) => {
+    if (url.includes('facebook.com/sharer') || url.includes('twitter.com/intent') || url.includes('zalo.me/share')) {
+      return '';
+    }
+    const cleanLinkText = linkText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    if (!cleanLinkText) return '';
+    return `[${cleanLinkText}](${url})`;
+  });
 
   // Paragraphs & line breaks
   text = text.replace(/<\/p>/gi, '\n\n');
@@ -230,6 +240,9 @@ function htmlToMarkdown(html: string): string {
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, ' ')
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)));
+
+  // Xóa các link rỗng (chỉ có link mà không có text)
+  text = text.replace(/\[\s*\]\([^\)]+\)/g, '');
 
   // Dọn dẹp khoảng trắng
   text = text.replace(/\n{3,}/g, '\n\n');

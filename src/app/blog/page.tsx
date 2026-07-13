@@ -26,6 +26,7 @@ export default async function BlogPage() {
   const { data: blogs } = await supabase
     .from('blogs')
     .select('*')
+    .eq('is_published', true)
     .order('published_at', { ascending: false });
 
   return (
@@ -96,9 +97,17 @@ export default async function BlogPage() {
                     
                     <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-auto">
                       <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-500 to-red-400 flex items-center justify-center text-white">
-                          <User className="w-4 h-4" />
-                        </div>
+                        {siteConfig.avatar_url || siteConfig.author_avatar ? (
+                          <img
+                            src={siteConfig.avatar_url || siteConfig.author_avatar}
+                            alt={blog.author}
+                            className="w-8 h-8 rounded-full object-cover shadow-sm border border-slate-100"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-500 to-red-400 flex items-center justify-center text-white">
+                            <User className="w-4 h-4" />
+                          </div>
+                        )}
                         {blog.author}
                       </div>
                       <span className="text-rose-600 font-medium text-sm flex items-center gap-1 group-hover:gap-2 transition-all">
