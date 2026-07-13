@@ -56,7 +56,6 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
   }, [pathname]);
 
   const logoUrl = siteConfig['logo_url'];
-  const logoText = siteConfig['logo_text'] || 'PhuongDev';
 
   return (
     <motion.header
@@ -76,16 +75,16 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
           <Link href="/" className="flex items-center gap-2 group">
             {logoUrl ? (
               <div className="relative h-10 w-[150px] flex items-center">
-                <Image 
-                  src={logoUrl} 
-                  alt={logoText} 
-                  fill 
+                <Image
+                  src={logoUrl}
+                  alt="PhuongDev Logo"
+                  fill
                   className="object-contain object-left"
                 />
               </div>
             ) : (
               <>
-                <motion.div 
+                <motion.div
                   whileHover={{ rotate: 10, scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   className="p-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-500 shadow-lg shadow-rose-500/30"
@@ -93,7 +92,6 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
                   <Code2 className="w-5 h-5 text-white" />
                 </motion.div>
                 <span className="text-lg font-bold text-slate-900 group-hover:text-rose-600 transition-colors">
-                  {logoText.substring(0, 6)}<span className="gradient-text">{logoText.substring(6)}</span>
                 </span>
               </>
             )}
@@ -129,7 +127,7 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
                     )}
                     <Icon className={cn("w-4 h-4 transition-transform group-hover:scale-110", isActive && "scale-110")} />
                     <span className="relative z-10">{link.label}</span>
-                    
+
                     {!isActive && (
                       <div className="absolute inset-0 bg-slate-50 opacity-0 group-hover:opacity-100 rounded-xl -z-10 transition-opacity" />
                     )}

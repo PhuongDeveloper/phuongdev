@@ -153,7 +153,7 @@ export default function SiteConfigClient({ initialData }: SiteConfigClientProps)
             disabled={!!editingItem} // Không cho sửa key nếu đang edit
             required
             placeholder="Ví dụ: logo_url, site_title"
-            helperText="Gợi ý: Dùng key 'logo_url' để đổi logo, 'logo_text' để đổi chữ logo."
+            helperText="Gợi ý: Dùng key 'logo_url' để tải ảnh logo lên."
           />
 
           <div>
