@@ -125,20 +125,37 @@ function extractArticleContent($: cheerio.CheerioAPI, baseUrl: string): string {
     // Xoá block rác theo class
     contentElement.find('[class*="social"], [class*="share"], [class*="breadcrumb"], [class*="tags"], [class*="author"], [class*="related"], [class*="comment"], [class*="advert"], [class*="banner"], [id*="social"], [id*="share"], [id*="comment"], [id*="advert"]').remove();
 
-    // Dọn dẹp link rác và làm gọn link
+    // Dọn dẹp link rác và làm gọn link (unwrap thành text)
     contentElement.find('a').each((_: any, el: any) => {
       const href = $(el).attr('href') || '';
-      if (href.includes('facebook.com/sharer') || href.includes('twitter.com/intent') || href.includes('zalo.me/share')) {
+      const text = $(el).text().toLowerCase().trim();
+      
+      const isSpam = 
+        href.includes('facebook.com') || 
+        href.includes('twitter.com') || 
+        href.includes('zalo.me') ||
+        text === 'bài liên quan' ||
+        text === 'đọc thêm' ||
+        text === 'xem thêm';
+        
+      if (isSpam) {
         $(el).remove();
       } else {
-        $(el).attr('href', resolveUrl(href, baseUrl));
+        // Gỡ bỏ thẻ <a> (unwrap), giữ lại phần chữ/ảnh bên trong để không bị coi là "liên kết thừa"
+        $(el).replaceWith($(el).html() || '');
       }
     });
 
-    // Đưa ảnh về absolute url
+    // Đưa ảnh về absolute url (xử lý lazy load data-src)
     contentElement.find('img').each((_: any, el: any) => {
-      const src = $(el).attr('src') || $(el).attr('data-src') || '';
-      if (src) $(el).attr('src', resolveUrl(src, baseUrl));
+      const src = $(el).attr('data-src') || $(el).attr('data-original') || $(el).attr('src') || '';
+      if (src && !src.startsWith('data:') && !src.includes('pixel')) {
+        $(el).attr('src', resolveUrl(src, baseUrl));
+        $(el).removeAttr('data-src');
+        $(el).removeAttr('data-original');
+      } else {
+        $(el).remove();
+      }
     });
 
     contentHtml = contentElement.html() || '';
@@ -163,6 +180,11 @@ function extractArticleContent($: cheerio.CheerioAPI, baseUrl: string): string {
 
   // Xóa link rỗng và dọn khoảng trắng thừa
   markdown = markdown.replace(/\[\s*\]\([^\)]+\)/g, '');
+  // Xóa ảnh trống (vd: ![]())
+  markdown = markdown.replace(/!\[.*?\]\(\s*\)/g, '');
+  // Xóa ảnh data base64 do sót lại
+  markdown = markdown.replace(/!\[.*?\]\(data:.*?\)/g, '');
+  
   markdown = markdown.replace(/\n{3,}/g, '\n\n');
   
   // Dọn các thẻ rác như **** hoặc ** ** do HTML thừa tạo ra
@@ -176,8 +198,8 @@ function extractArticleContent($: cheerio.CheerioAPI, baseUrl: string): string {
 function extractImages($: cheerio.CheerioAPI, baseUrl: string): string[] {
   const images: string[] = [];
   $('img').each((_: any, el: any) => {
-    const src = $(el).attr('src') || $(el).attr('data-src') || '';
-    if (src && !src.includes('data:') && !src.includes('pixel') && !src.includes('tracking')) {
+    const src = $(el).attr('data-src') || $(el).attr('data-original') || $(el).attr('src') || '';
+    if (src && !src.startsWith('data:') && !src.includes('pixel') && !src.includes('tracking')) {
       images.push(resolveUrl(src, baseUrl));
     }
   });
