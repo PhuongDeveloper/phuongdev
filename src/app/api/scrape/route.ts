@@ -120,12 +120,43 @@ function extractArticleContent($: cheerio.CheerioAPI, baseUrl: string): string {
 
   let contentHtml = '';
   if (contentElement.length) {
-    // Dọn rác
-    contentElement.find('script, style, nav, header, footer, aside, iframe, form, noscript, svg, button').remove();
-    // Xoá block rác theo class
-    contentElement.find('[class*="social"], [class*="share"], [class*="breadcrumb"], [class*="tags"], [class*="author"], [class*="related"], [class*="comment"], [class*="advert"], [class*="banner"], [id*="social"], [id*="share"], [id*="comment"], [id*="advert"]').remove();
+    // 1. Dọn rác an toàn (không dùng wildcard dễ xoá nhầm ảnh)
+    contentElement.find('script, style, nav, header, footer, aside, iframe, form, svg, button').remove();
+    
+    const spamSelectors = [
+      '.social-share', '.share-buttons', '.article-share', 
+      '.breadcrumb', '.article-tags', 
+      '.author-info', '.article-author',
+      '.related-news', '.related-articles', '.tin-lien-quan',
+      '.comments', '.box-comment', 
+      '.advertisement', '.banner-ads', '.ads-content',
+      '#social', '#share', '#comments', '#advert'
+    ];
+    contentElement.find(spamSelectors.join(', ')).remove();
 
-    // Dọn dẹp link rác và làm gọn link (unwrap thành text)
+    // 2. Cứu ảnh (xử lý Lazy Load) TRƯỚC KHI unwrap thẻ a
+    contentElement.find('img').each((_: any, el: any) => {
+      // Quét các thuộc tính phổ biến chứa link ảnh thật
+      const realSrc = 
+        $(el).attr('data-src') || 
+        $(el).attr('data-original') || 
+        $(el).attr('data-lazy-src') || 
+        $(el).attr('srcset')?.split(' ')[0] || 
+        $(el).attr('src') || '';
+        
+      if (realSrc && !realSrc.startsWith('data:') && !realSrc.includes('pixel')) {
+        $(el).attr('src', resolveUrl(realSrc, baseUrl));
+        // Xoá các thuộc tính rác để tránh nhiễu
+        $(el).removeAttr('data-src').removeAttr('data-original').removeAttr('data-lazy-src').removeAttr('srcset');
+      } else {
+        // Nếu chỉ là ảnh placeholder (data:image) mà không tìm thấy link thật thì mới xoá
+        if (realSrc.startsWith('data:')) {
+           $(el).remove();
+        }
+      }
+    });
+
+    // 3. Giải quyết liên kết rác và unwrap thẻ <a>
     contentElement.find('a').each((_: any, el: any) => {
       const href = $(el).attr('href') || '';
       const text = $(el).text().toLowerCase().trim();
@@ -141,20 +172,8 @@ function extractArticleContent($: cheerio.CheerioAPI, baseUrl: string): string {
       if (isSpam) {
         $(el).remove();
       } else {
-        // Gỡ bỏ thẻ <a> (unwrap), giữ lại phần chữ/ảnh bên trong để không bị coi là "liên kết thừa"
+        // Gỡ thẻ <a>, giữ lại text/img bên trong
         $(el).replaceWith($(el).html() || '');
-      }
-    });
-
-    // Đưa ảnh về absolute url (xử lý lazy load data-src)
-    contentElement.find('img').each((_: any, el: any) => {
-      const src = $(el).attr('data-src') || $(el).attr('data-original') || $(el).attr('src') || '';
-      if (src && !src.startsWith('data:') && !src.includes('pixel')) {
-        $(el).attr('src', resolveUrl(src, baseUrl));
-        $(el).removeAttr('data-src');
-        $(el).removeAttr('data-original');
-      } else {
-        $(el).remove();
       }
     });
 
@@ -198,7 +217,13 @@ function extractArticleContent($: cheerio.CheerioAPI, baseUrl: string): string {
 function extractImages($: cheerio.CheerioAPI, baseUrl: string): string[] {
   const images: string[] = [];
   $('img').each((_: any, el: any) => {
-    const src = $(el).attr('data-src') || $(el).attr('data-original') || $(el).attr('src') || '';
+    const src = 
+      $(el).attr('data-src') || 
+      $(el).attr('data-original') || 
+      $(el).attr('data-lazy-src') || 
+      $(el).attr('srcset')?.split(' ')[0] || 
+      $(el).attr('src') || '';
+      
     if (src && !src.startsWith('data:') && !src.includes('pixel') && !src.includes('tracking')) {
       images.push(resolveUrl(src, baseUrl));
     }
