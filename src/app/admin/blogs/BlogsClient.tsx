@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, Edit2, Trash2, X, Save, Image as ImageIcon, Globe } from 'lucide-react';
@@ -42,6 +42,10 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
   const router = useRouter();
+
+  useEffect(() => {
+    setBlogs(initialBlogs);
+  }, [initialBlogs]);
 
   // Mở modal thêm mới
   const handleAddNew = () => {
