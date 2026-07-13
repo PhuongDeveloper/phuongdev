@@ -13,6 +13,11 @@ export default async function ProductsPage() {
     .select('*')
     .order('sort_order', { ascending: true });
 
+  const { data: categories } = await supabase
+    .from('categories')
+    .select('*')
+    .order('sort_order', { ascending: true });
+
   return (
     <div className="space-y-6">
       <div>
@@ -20,7 +25,7 @@ export default async function ProductsPage() {
         <p className="text-slate-500">Thêm mã nguồn, script hoặc template để hiển thị trong cửa hàng.</p>
       </div>
 
-      <ProductsClient initialData={products || []} />
+      <ProductsClient initialData={products || []} categories={categories || []} />
     </div>
   );
 }

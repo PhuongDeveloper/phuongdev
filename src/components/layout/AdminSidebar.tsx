@@ -23,6 +23,7 @@ import {
   Shield,
   User,
   FileText,
+  Tags,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/utils/helpers';
@@ -35,6 +36,7 @@ const adminLinks = [
   { href: '/admin/projects', label: 'Dự Án', icon: FolderKanban },
   { href: '/admin/services', label: 'Dịch Vụ', icon: Briefcase },
   { href: '/admin/products', label: 'Sản Phẩm', icon: ShoppingBag },
+  { href: '/admin/categories', label: 'Danh Mục', icon: Tags },
   { href: '/admin/blogs', label: 'Bài Viết (Blog)', icon: FileText },
   { href: '/admin/communities', label: 'Cộng Đồng', icon: Users },
   { href: '/admin/account', label: 'Đổi Mật Khẩu', icon: Shield },

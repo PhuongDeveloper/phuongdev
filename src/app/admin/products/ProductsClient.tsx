@@ -12,14 +12,15 @@ import FormInput from '@/components/ui/FormInput';
 import FormTextarea from '@/components/ui/FormTextarea';
 import Button from '@/components/ui/Button';
 import ImageUpload from '@/components/ui/ImageUpload';
-import { type Product, type ProductInsert } from '@/lib/types/database';
+import { type Product, type ProductInsert, type Category } from '@/lib/types/database';
 import { formatCurrency } from '@/utils/helpers';
 
 interface ProductsClientProps {
   initialData: Product[];
+  categories: Category[];
 }
 
-export default function ProductsClient({ initialData }: ProductsClientProps) {
+export default function ProductsClient({ initialData, categories }: ProductsClientProps) {
   const [data, setData] = useState<Product[]>(initialData);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Product | null>(null);
@@ -35,7 +36,7 @@ export default function ProductsClient({ initialData }: ProductsClientProps) {
     download_url: '',
     demo_url: '',
     image_url: '',
-    category: 'script',
+    category: categories.length > 0 ? categories[0].slug : '',
     is_active: true,
     sort_order: 0,
   });
@@ -71,7 +72,7 @@ export default function ProductsClient({ initialData }: ProductsClientProps) {
       download_url: '',
       demo_url: '',
       image_url: '',
-      category: 'script',
+      category: categories.length > 0 ? categories[0].slug : '',
       is_active: true,
       sort_order: data.length,
     });
@@ -170,7 +171,7 @@ export default function ProductsClient({ initialData }: ProductsClientProps) {
         <div>
           <div className="font-medium text-slate-900">{item.title}</div>
           <div className="text-xs text-slate-500 uppercase tracking-wider mt-0.5">
-            {item.category}
+            {categories.find(c => c.slug === item.category)?.name || item.category}
           </div>
         </div>
       ),
@@ -248,10 +249,9 @@ export default function ProductsClient({ initialData }: ProductsClientProps) {
               }
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
             >
-              <option value="script">Script / Mã Nguồn</option>
-              <option value="template">Template Giao Diện</option>
-              <option value="bot">Bot / Tool</option>
-              <option value="other">Khác</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.slug}>{cat.name}</option>
+              ))}
             </select>
           </div>
 

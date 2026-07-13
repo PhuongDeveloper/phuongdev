@@ -44,6 +44,17 @@ export interface Service {
   updated_at: string;
 }
 
+/** Danh mục sản phẩm/bài viết */
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Sản phẩm cửa hàng (mã nguồn, script) */
 export interface Product {
   id: string;
@@ -90,6 +101,9 @@ export type ProjectUpdate = Partial<ProjectInsert>;
 
 export type ServiceInsert = Omit<Service, 'id' | 'created_at' | 'updated_at' | 'views'> & { views?: number };
 export type ServiceUpdate = Partial<ServiceInsert>;
+
+export type CategoryInsert = Omit<Category, 'id' | 'created_at' | 'updated_at'>;
+export type CategoryUpdate = Partial<CategoryInsert>;
 
 export type ProductInsert = Omit<Product, 'id' | 'created_at' | 'updated_at' | 'views'> & { views?: number };
 export type ProductUpdate = Partial<ProductInsert>;
