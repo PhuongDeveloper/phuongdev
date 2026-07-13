@@ -5,8 +5,9 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Edit2, Trash2, X, Save, Image as ImageIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save, Image as ImageIcon, Globe } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import FormInput from '@/components/ui/FormInput';
@@ -40,6 +41,7 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
+  const router = useRouter();
 
   // Mở modal thêm mới
   const handleAddNew = () => {
@@ -200,10 +202,16 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
           <h1 className="text-2xl font-bold text-slate-900">Quản Lý Blog</h1>
           <p className="text-slate-600">Thêm, sửa, xoá bài viết công nghệ.</p>
         </div>
-        <Button onClick={handleAddNew}>
-          <Plus className="w-5 h-5 mr-2" />
-          Viết bài mới
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push('/admin/blogs/scraper')}>
+            <Globe className="w-5 h-5 mr-2" />
+            Quét Bài Báo
+          </Button>
+          <Button onClick={handleAddNew}>
+            <Plus className="w-5 h-5 mr-2" />
+            Viết bài mới
+          </Button>
+        </div>
       </div>
 
       <Card padding="none" className="overflow-hidden">
