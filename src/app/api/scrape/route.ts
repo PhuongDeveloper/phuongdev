@@ -5,6 +5,8 @@
    ========================================================================== */
 
 import { NextRequest, NextResponse } from 'next/server';
+import * as cheerio from 'cheerio';
+import TurndownService from 'turndown';
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,34 +47,32 @@ export async function POST(request: NextRequest) {
 
     const html = await response.text();
 
-    // --- Parse HTML bằng regex (server-side, không cần DOM parser) ---
+    // --- Parse HTML ---
+    const $ = cheerio.load(html);
 
-    // Tiêu đề: ưu tiên og:title > title tag > h1
     const title =
-      extractMeta(html, 'og:title') ||
-      extractMeta(html, 'twitter:title') ||
-      extractTagContent(html, 'title') ||
-      extractFirstTag(html, 'h1') ||
+      $('meta[property="og:title"]').attr('content') ||
+      $('meta[name="twitter:title"]').attr('content') ||
+      $('title').text() ||
+      $('h1').first().text() ||
       '';
 
-    // Mô tả: ưu tiên og:description > meta description
     const excerpt =
-      extractMeta(html, 'og:description') ||
-      extractMetaName(html, 'description') ||
-      extractMeta(html, 'twitter:description') ||
+      $('meta[property="og:description"]').attr('content') ||
+      $('meta[name="description"]').attr('content') ||
+      $('meta[name="twitter:description"]').attr('content') ||
       '';
 
-    // Ảnh bìa: ưu tiên og:image > twitter:image
     const coverImage =
-      extractMeta(html, 'og:image') ||
-      extractMeta(html, 'twitter:image') ||
+      $('meta[property="og:image"]').attr('content') ||
+      $('meta[name="twitter:image"]').attr('content') ||
       '';
 
-    // Nội dung chính: trích xuất từ thẻ article, hoặc các thẻ nội dung phổ biến
-    const content = extractArticleContent(html);
+    // Nội dung chính
+    const content = extractArticleContent($, url);
 
     // Ảnh trong bài
-    const images = extractImages(html, url);
+    const images = extractImages($, url);
 
     // Slug từ URL
     const slug = generateSlug(url, title);
@@ -100,169 +100,87 @@ export async function POST(request: NextRequest) {
 
 /* ---------- Helper functions ---------- */
 
-/** Trích xuất nội dung meta property (og:*, twitter:*) */
-function extractMeta(html: string, property: string): string {
-  const regex = new RegExp(
-    `<meta[^>]+(?:property|name)=["']${property}["'][^>]+content=["']([^"']+)["']`,
-    'i'
-  );
-  const match = html.match(regex);
-  if (match) return match[1];
-
-  // Thử thứ tự ngược (content trước property)
-  const regex2 = new RegExp(
-    `<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${property}["']`,
-    'i'
-  );
-  const match2 = html.match(regex2);
-  return match2 ? match2[1] : '';
-}
-
-/** Trích xuất meta name */
-function extractMetaName(html: string, name: string): string {
-  return extractMeta(html, name);
-}
-
-/** Trích xuất nội dung thẻ HTML (ví dụ: <title>) */
-function extractTagContent(html: string, tag: string): string {
-  const regex = new RegExp(`<${tag}[^>]*>([^<]+)</${tag}>`, 'i');
-  const match = html.match(regex);
-  return match ? match[1].trim() : '';
-}
-
-/** Trích xuất nội dung thẻ đầu tiên (h1, h2...) */
-function extractFirstTag(html: string, tag: string): string {
-  const regex = new RegExp(`<${tag}[^>]*>(.*?)</${tag}>`, 'is');
-  const match = html.match(regex);
-  return match ? match[1].replace(/<[^>]+>/g, '').trim() : '';
-}
-
 /** Trích xuất nội dung bài viết chính */
-function extractArticleContent(html: string): string {
-  // Thử tìm thẻ <article>
-  let contentHtml = '';
+function extractArticleContent($: cheerio.CheerioAPI, baseUrl: string): string {
+  let contentElement: any = $('article').first();
 
-  const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-  if (articleMatch) {
-    contentHtml = articleMatch[1];
-  } else {
-    // Thử tìm các class phổ biến cho nội dung bài báo
-    const contentSelectors = [
-      /class=["'][^"']*(?:article-body|article-content|post-content|entry-content|content-body|detail-content|fck_detail|main-content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-      /class=["'][^"']*(?:singular-body|cms-body|detail__content|article__body|story-body)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+  if (!contentElement.length) {
+    const selectors = [
+      '.article-body', '.article-content', '.post-content', '.entry-content',
+      '.content-body', '.detail-content', '.fck_detail', '.main-content',
+      '.singular-body', '.cms-body', '.detail__content', '.article__body', '.story-body'
     ];
-
-    for (const selector of contentSelectors) {
-      const match = html.match(selector);
-      if (match) {
-        contentHtml = match[1];
+    for (const sel of selectors) {
+      if ($(sel).length) {
+        contentElement = $(sel).first();
         break;
       }
     }
   }
 
-  if (!contentHtml) {
-    // Fallback: lấy tất cả nội dung trong body, loại bỏ script/style
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    contentHtml = bodyMatch ? bodyMatch[1] : '';
+  let contentHtml = '';
+  if (contentElement.length) {
+    // Dọn rác
+    contentElement.find('script, style, nav, header, footer, aside, iframe, form, noscript, svg, button').remove();
+    // Xoá block rác theo class
+    contentElement.find('[class*="social"], [class*="share"], [class*="breadcrumb"], [class*="tags"], [class*="author"], [class*="related"], [class*="comment"], [class*="advert"], [class*="banner"], [id*="social"], [id*="share"], [id*="comment"], [id*="advert"]').remove();
+
+    // Dọn dẹp link rác và làm gọn link
+    contentElement.find('a').each((_: any, el: any) => {
+      const href = $(el).attr('href') || '';
+      if (href.includes('facebook.com/sharer') || href.includes('twitter.com/intent') || href.includes('zalo.me/share')) {
+        $(el).remove();
+      } else {
+        $(el).attr('href', resolveUrl(href, baseUrl));
+      }
+    });
+
+    // Đưa ảnh về absolute url
+    contentElement.find('img').each((_: any, el: any) => {
+      const src = $(el).attr('src') || $(el).attr('data-src') || '';
+      if (src) $(el).attr('src', resolveUrl(src, baseUrl));
+    });
+
+    contentHtml = contentElement.html() || '';
+  } else {
+    // Fallback: body
+    $('body').find('script, style, nav, header, footer, aside, iframe, form, noscript, svg, button').remove();
+    contentHtml = $('body').html() || '';
   }
 
-  // Chuyển HTML sang dạng text đơn giản (giống Markdown)
-  return htmlToMarkdown(contentHtml);
-}
-
-/** Chuyển đổi HTML sang Markdown đơn giản */
-function htmlToMarkdown(html: string): string {
-  let text = html;
-
-  // 1. Xoá các khối HTML thường chứa nội dung rác bằng class/id (breadcrumb, social, tags, author, related)
-  text = text.replace(/<[^>]+(?:class|id)=["'][^"']*(?:social|share|breadcrumb|tags|author|related|comment|advert)[^"']*["'][^>]*>[\s\S]*?<\/[a-z]+>/gi, '');
-
-  // 2. Xoá các thẻ không cần thiết
-  text = text.replace(/<(script|style|nav|header|footer|aside|iframe|form|noscript|svg|button)[^>]*>[\s\S]*?<\/\1>/gi, '');
-
-  // Xoá các comment HTML
-  text = text.replace(/<!--[\s\S]*?-->/g, '');
-
-  // Headings
-  text = text.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, '\n# $1\n');
-  text = text.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, '\n## $1\n');
-  text = text.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, '\n### $1\n');
-  text = text.replace(/<h4[^>]*>([\s\S]*?)<\/h4>/gi, '\n#### $1\n');
-
-  // Bold & Italic
-  text = text.replace(/<(strong|b)[^>]*>([\s\S]*?)<\/\1>/gi, '**$2**');
-  text = text.replace(/<(em|i)[^>]*>([\s\S]*?)<\/\1>/gi, '*$2*');
-
-  // Images
-  text = text.replace(/<img[^>]+src=["']([^"']+)["'][^>]*alt=["']([^"']*?)["'][^>]*\/?>/gi, '\n![$2]($1)\n');
-  text = text.replace(/<img[^>]+alt=["']([^"']*?)["'][^>]*src=["']([^"']+)["'][^>]*\/?>/gi, '\n![$1]($2)\n');
-  text = text.replace(/<img[^>]+src=["']([^"']+)["'][^>]*\/?>/gi, '\n![]($1)\n');
-
-  // Links (Lọc link chia sẻ MXH và link rỗng)
-  text = text.replace(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (match, url, linkText) => {
-    if (url.includes('facebook.com/sharer') || url.includes('twitter.com/intent') || url.includes('zalo.me/share')) {
-      return '';
-    }
-    const cleanLinkText = linkText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-    if (!cleanLinkText) return '';
-    return `[${cleanLinkText}](${url})`;
+  // Cấu hình Turndown (thông minh phân biệt Markdown)
+  const turndownService = new TurndownService({
+    headingStyle: 'atx',
+    codeBlockStyle: 'fenced',
+    emDelimiter: '*',
+    strongDelimiter: '**',
   });
 
-  // Paragraphs & line breaks
-  text = text.replace(/<\/p>/gi, '\n\n');
-  text = text.replace(/<br\s*\/?>/gi, '\n');
-  text = text.replace(/<p[^>]*>/gi, '');
+  // Bổ sung hỗ trợ giữ lại gạch chân (u) vì MD không hỗ trợ u
+  turndownService.keep(['u', 'ins', 'kbd']);
 
-  // Lists
-  text = text.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '- $1\n');
-  text = text.replace(/<\/?(?:ul|ol)[^>]*>/gi, '\n');
+  let markdown = turndownService.turndown(contentHtml);
 
-  // Blockquote
-  text = text.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, '\n> $1\n');
+  // Xóa link rỗng và dọn khoảng trắng thừa
+  markdown = markdown.replace(/\[\s*\]\([^\)]+\)/g, '');
+  markdown = markdown.replace(/\n{3,}/g, '\n\n');
+  
+  // Dọn các thẻ rác như **** hoặc ** ** do HTML thừa tạo ra
+  markdown = markdown.replace(/\*\*[\s\*]*\*\*/g, ''); 
+  markdown = markdown.replace(/\*[\s\*]*\*/g, '');
 
-  // Code blocks
-  text = text.replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, '\n```\n$1\n```\n');
-  text = text.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`');
-
-  // Horizontal rule
-  text = text.replace(/<hr[^>]*\/?>/gi, '\n---\n');
-
-  // Xoá tất cả các thẻ HTML còn lại
-  text = text.replace(/<[^>]+>/g, '');
-
-  // Decode HTML entities
-  text = text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)));
-
-  // Xóa các link rỗng (chỉ có link mà không có text)
-  text = text.replace(/\[\s*\]\([^\)]+\)/g, '');
-
-  // Dọn dẹp khoảng trắng
-  text = text.replace(/\n{3,}/g, '\n\n');
-  text = text.trim();
-
-  return text;
+  return markdown.trim();
 }
 
 /** Trích xuất tất cả ảnh trong bài */
-function extractImages(html: string, baseUrl: string): string[] {
+function extractImages($: cheerio.CheerioAPI, baseUrl: string): string[] {
   const images: string[] = [];
-  const imgRegex = /<img[^>]+src=["']([^"']+)["']/gi;
-  let match;
-  while ((match = imgRegex.exec(html)) !== null) {
-    const src = resolveUrl(match[1], baseUrl);
+  $('img').each((_: any, el: any) => {
+    const src = $(el).attr('src') || $(el).attr('data-src') || '';
     if (src && !src.includes('data:') && !src.includes('pixel') && !src.includes('tracking')) {
-      images.push(src);
+      images.push(resolveUrl(src, baseUrl));
     }
-  }
-  // Loại bỏ trùng lặp
+  });
   return [...new Set(images)].slice(0, 20);
 }
 
