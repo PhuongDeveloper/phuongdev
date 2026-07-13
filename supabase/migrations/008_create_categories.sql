@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS categories (
 );
 
 -- Trigger for updated_at
+DROP TRIGGER IF EXISTS trigger_categories_updated_at ON categories;
 CREATE TRIGGER trigger_categories_updated_at
   BEFORE UPDATE ON categories
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -21,16 +22,24 @@ CREATE TRIGGER trigger_categories_updated_at
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 
 -- Read access for everyone
+DROP POLICY IF EXISTS "Cho phép đọc công khai categories" ON categories;
 CREATE POLICY "Cho phép đọc công khai categories" ON categories
   FOR SELECT USING (true);
 
--- Admin write access
-CREATE POLICY "Chỉ admin được thêm categories" ON categories
-  FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Chỉ admin được sửa categories" ON categories
-  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Chỉ admin được xoá categories" ON categories
-  FOR DELETE TO authenticated USING (true);
+-- Admin write access (Cho phép anon vì sử dụng custom auth)
+DROP POLICY IF EXISTS "Chỉ admin được thêm categories" ON categories;
+DROP POLICY IF EXISTS "Chỉ admin được sửa categories" ON categories;
+DROP POLICY IF EXISTS "Chỉ admin được xoá categories" ON categories;
+DROP POLICY IF EXISTS "Anon được thêm categories" ON categories;
+DROP POLICY IF EXISTS "Anon được sửa categories" ON categories;
+DROP POLICY IF EXISTS "Anon được xoá categories" ON categories;
+
+CREATE POLICY "Anon được thêm categories" ON categories
+  FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "Anon được sửa categories" ON categories
+  FOR UPDATE TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Anon được xoá categories" ON categories
+  FOR DELETE TO anon USING (true);
 
 -- Seed initial data matching existing hardcoded categories
 INSERT INTO categories (name, slug, description, sort_order) VALUES

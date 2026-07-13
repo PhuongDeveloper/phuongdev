@@ -62,8 +62,6 @@ export default function ProductsList({ products }: ProductsListProps) {
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center transition-transform duration-700 group-hover:scale-105">
-                  <Tag className="w-20 h-20 text-white/20" />
-                  <Tag className="w-12 h-12 text-white absolute" />
                 </div>
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-transparent" />
@@ -75,11 +73,8 @@ export default function ProductsList({ products }: ProductsListProps) {
                 </span>
               </div>
               
-              {/* Tiêu đề & Icon góc dưới cùng banner */}
+              {/* Tiêu đề góc dưới cùng banner */}
               <div className="absolute bottom-4 left-6 right-6">
-                <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white mb-3">
-                  <Tag className="w-5 h-5" />
-                </div>
                 <h3 className="text-2xl font-bold text-white mb-1 line-clamp-1">
                   {product.title}
                 </h3>
