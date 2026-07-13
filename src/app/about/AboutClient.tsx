@@ -1,9 +1,17 @@
 'use client';
 
 import { motion, type Variants } from 'framer-motion';
-import { Mail, MapPin, Briefcase, GraduationCap, ExternalLink } from 'lucide-react';
+import { Mail, MapPin, Briefcase, GraduationCap } from 'lucide-react';
 import { FaFacebook as Facebook, FaTelegram as Telegram } from 'react-icons/fa';
 import Card from '@/components/ui/Card';
+import Image from 'next/image';
+
+interface Experience {
+  title: string;
+  duration: string;
+  description: string;
+  type: 'work' | 'education';
+}
 
 interface AboutClientProps {
   siteConfig: Record<string, string>;
@@ -25,9 +33,23 @@ export default function AboutClient({ siteConfig }: AboutClientProps) {
     show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
   };
 
+  const defaultExperiences: Experience[] = [
+    { title: 'Senior Full-Stack Developer', duration: 'Hiện tại', description: 'Phát triển các ứng dụng web và di động phức tạp, tối ưu hóa hiệu suất, xây dựng kiến trúc hệ thống và dẫn dắt team phát triển.', type: 'work' },
+    { title: 'Backend Developer', duration: '2020 - 2023', description: 'Thiết kế và triển khai RESTful APIs, quản trị cơ sở dữ liệu lớn (PostgreSQL, MongoDB) và xây dựng các dịch vụ microservices bằng Node.js.', type: 'work' },
+    { title: 'Đại Học Bách Khoa', duration: '2016 - 2020', description: 'Tốt nghiệp loại Giỏi chuyên ngành Khoa học Máy tính. Tham gia nghiên cứu AI và hoàn thành nhiều đề tài xuất sắc.', type: 'education' },
+  ];
+
+  let experiences: Experience[] = defaultExperiences;
+  try {
+    if (siteConfig['about_experiences']) {
+      experiences = JSON.parse(siteConfig['about_experiences']);
+    }
+  } catch (e) {
+    console.error('Lỗi khi parse experiences', e);
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      {/* Hero Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -46,37 +68,43 @@ export default function AboutClient({ siteConfig }: AboutClientProps) {
         <motion.div variants={fadeInUp} className="lg:col-span-4 space-y-6">
           <Card variant="solid" className="border border-slate-200 sticky top-24 shadow-sm rounded-2xl p-8">
             <div className="flex flex-col items-center">
-              <div className="w-40 h-40 rounded-full border border-slate-200 bg-slate-50 mb-6 flex items-center justify-center overflow-hidden">
-                <span className="text-5xl font-extrabold text-rose-600">PD</span>
+              <div className="w-40 h-40 rounded-full border border-slate-200 bg-slate-50 mb-6 flex items-center justify-center overflow-hidden relative">
+                {siteConfig['about_avatar_url'] ? (
+                  <Image src={siteConfig['about_avatar_url']} alt="Avatar" fill className="object-cover" />
+                ) : (
+                  <span className="text-5xl font-extrabold text-rose-600">
+                    {siteConfig['about_name'] ? siteConfig['about_name'].substring(0, 2).toUpperCase() : 'PD'}
+                  </span>
+                )}
               </div>
 
-              <h2 className="text-2xl font-bold text-slate-900 mb-1">
-                PhuongDev
+              <h2 className="text-2xl font-bold text-slate-900 mb-1 text-center">
+                {siteConfig['about_name'] || 'PhuongDev'}
               </h2>
-              <p className="text-slate-500 font-medium mb-8 uppercase tracking-widest text-xs">
-                Software Engineer
+              <p className="text-slate-500 font-medium mb-8 uppercase tracking-widest text-xs text-center">
+                {siteConfig['about_title'] || 'Software Engineer'}
               </p>
 
               <div className="w-full space-y-5 text-sm text-slate-600 border-t border-slate-100 pt-8">
                 <div className="flex items-center gap-4">
                   <MapPin className="w-5 h-5 text-slate-400" />
-                  <span className="font-medium text-slate-700">Hà Nội, Việt Nam</span>
+                  <span className="font-medium text-slate-700">{siteConfig['about_location'] || 'Hà Nội, Việt Nam'}</span>
                 </div>
                 {siteConfig['email'] && (
                   <div className="flex items-center gap-4">
                     <Mail className="w-5 h-5 text-slate-400" />
-                    <a href={`mailto:${siteConfig['email']}`} className="font-medium hover:text-rose-600 transition-colors">
+                    <a href={`mailto:${siteConfig['email']}`} className="font-medium hover:text-rose-600 transition-colors break-all">
                       {siteConfig['email']}
                     </a>
                   </div>
                 )}
                 <div className="flex items-center gap-4">
                   <Briefcase className="w-5 h-5 text-slate-400" />
-                  <span className="font-medium text-slate-700">Freelancer / Full-time</span>
+                  <span className="font-medium text-slate-700">{siteConfig['about_availability'] || 'Freelancer / Full-time'}</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <GraduationCap className="w-5 h-5 text-slate-400" />
-                  <span className="font-medium text-slate-700">Công Nghệ Thông Tin</span>
+                  <span className="font-medium text-slate-700">{siteConfig['about_major'] || 'Công Nghệ Thông Tin'}</span>
                 </div>
               </div>
 
@@ -125,50 +153,25 @@ export default function AboutClient({ siteConfig }: AboutClientProps) {
             </h3>
 
             <div className="space-y-12">
-              {/* Item 1 */}
-              <div className="flex gap-6">
-                <div className="flex flex-col items-center">
-                  <div className="w-3 h-3 rounded-full bg-rose-600 mt-2"></div>
-                  <div className="w-px h-full bg-slate-200 mt-2"></div>
+              {experiences.map((exp, idx) => (
+                <div key={idx} className="flex gap-6">
+                  <div className="flex flex-col items-center">
+                    <div className={`w-3 h-3 rounded-full mt-2 ${exp.type === 'education' ? 'bg-slate-300' : 'bg-rose-600'}`}></div>
+                    {idx < experiences.length - 1 && (
+                      <div className="w-px h-full bg-slate-200 mt-2"></div>
+                    )}
+                  </div>
+                  <div className="pb-8 w-full">
+                    <h4 className="font-bold text-slate-900 text-xl mb-1">{exp.title}</h4>
+                    <div className={`${exp.type === 'education' ? 'text-slate-500' : 'text-rose-600'} font-medium text-sm mb-4`}>
+                      {exp.duration}
+                    </div>
+                    <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
+                      {exp.description}
+                    </p>
+                  </div>
                 </div>
-                <div className="pb-8">
-                  <h4 className="font-bold text-slate-900 text-xl mb-1">Senior Full-Stack Developer</h4>
-                  <div className="text-rose-600 font-medium text-sm mb-4">Hiện tại</div>
-                  <p className="text-slate-600 leading-relaxed">
-                    Phát triển các ứng dụng web và di động phức tạp, tối ưu hóa hiệu suất, xây dựng kiến trúc hệ thống và dẫn dắt team phát triển.
-                  </p>
-                </div>
-              </div>
-
-              {/* Item 2 */}
-              <div className="flex gap-6">
-                <div className="flex flex-col items-center">
-                  <div className="w-3 h-3 rounded-full bg-slate-300 mt-2"></div>
-                  <div className="w-px h-full bg-slate-200 mt-2"></div>
-                </div>
-                <div className="pb-8">
-                  <h4 className="font-bold text-slate-900 text-xl mb-1">Backend Developer</h4>
-                  <div className="text-slate-500 font-medium text-sm mb-4">2020 - 2023</div>
-                  <p className="text-slate-600 leading-relaxed">
-                    Thiết kế và triển khai RESTful APIs, quản trị cơ sở dữ liệu lớn (PostgreSQL, MongoDB) và xây dựng các dịch vụ microservices bằng Node.js.
-                  </p>
-                </div>
-              </div>
-
-              {/* Item 3 */}
-              <div className="flex gap-6">
-                <div className="flex flex-col items-center">
-                  <div className="w-3 h-3 rounded-full bg-slate-300 mt-2"></div>
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-900 text-xl mb-1">Đại Học Bách Khoa</h4>
-                  <div className="text-slate-500 font-medium text-sm mb-4">2016 - 2020</div>
-                  <p className="text-slate-600 leading-relaxed">
-                    Tốt nghiệp loại Giỏi chuyên ngành Khoa học Máy tính. Tham gia nghiên cứu AI và hoàn thành nhiều đề tài xuất sắc.
-                  </p>
-                </div>
-              </div>
-
+              ))}
             </div>
           </section>
         </motion.div>

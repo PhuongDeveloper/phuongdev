@@ -21,6 +21,8 @@ import {
   ExternalLink,
   Users,
   Shield,
+  User,
+  FileText,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/utils/helpers';
@@ -29,10 +31,11 @@ import { cn } from '@/utils/helpers';
 const adminLinks = [
   { href: '/admin', label: 'Tổng Quan', icon: LayoutDashboard },
   { href: '/admin/site-config', label: 'Cấu Hình Web', icon: Settings },
-  { href: '/admin/projects', label: 'Dự Án', icon: Briefcase },
-  { href: '/admin/services', label: 'Dịch Vụ', icon: Settings },
+  { href: '/admin/about', label: 'Trang Giới Thiệu', icon: User },
+  { href: '/admin/projects', label: 'Dự Án', icon: FolderKanban },
+  { href: '/admin/services', label: 'Dịch Vụ', icon: Briefcase },
   { href: '/admin/products', label: 'Sản Phẩm', icon: ShoppingBag },
-  { href: '/admin/blogs', label: 'Quản Lý Blog', icon: LayoutDashboard },
+  { href: '/admin/blogs', label: 'Bài Viết (Blog)', icon: FileText },
   { href: '/admin/communities', label: 'Cộng Đồng', icon: Users },
   { href: '/admin/account', label: 'Đổi Mật Khẩu', icon: Shield },
 ];
