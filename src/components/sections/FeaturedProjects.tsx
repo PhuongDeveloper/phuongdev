@@ -10,6 +10,7 @@ import { FaGithub as Github } from 'react-icons/fa';
 import Card from '@/components/ui/Card';
 import { type Project } from '@/lib/types/database';
 import { truncateText } from '@/utils/helpers';
+import { createClient } from '@/lib/supabase/client';
 
 interface FeaturedProjectsProps {
   projects: Project[];
@@ -34,6 +35,15 @@ const itemVariants: Variants = {
 
 export default function FeaturedProjects({ projects }: FeaturedProjectsProps) {
   if (!projects || projects.length === 0) return null;
+
+  const handleIncrementView = async (projectId: string, currentViews: number) => {
+    try {
+      const supabase = createClient();
+      await supabase.from('projects').update({ views: currentViews + 1 }).eq('id', projectId);
+    } catch (error) {
+      console.error('Lỗi khi tăng lượt view:', error);
+    }
+  };
 
   return (
     <section className="py-20 bg-white">
@@ -127,6 +137,7 @@ export default function FeaturedProjects({ projects }: FeaturedProjectsProps) {
                             href={project.demo_url}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={() => handleIncrementView(project.id, project.views || 0)}
                             className="flex items-center gap-1.5 text-sm font-medium text-rose-600 hover:text-rose-700 transition-colors"
                           >
                             <ExternalLink className="w-4 h-4" />
@@ -139,6 +150,7 @@ export default function FeaturedProjects({ projects }: FeaturedProjectsProps) {
                             href={project.github_url}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={() => handleIncrementView(project.id, project.views || 0)}
                             className="flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
                           >
                             <Github className="w-4 h-4" />
