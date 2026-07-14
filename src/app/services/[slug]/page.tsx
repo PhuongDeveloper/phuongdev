@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, PhoneCall } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -15,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const supabase = await createClient();
   const { data: service } = await supabase
     .from('services')
-    .select('title, description')
+    .select('title, description, image_url')
     .eq('slug', resolvedParams.slug)
     .single();
 
@@ -24,6 +25,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: `${service.title} | PhuongDev`,
     description: service.description,
+    openGraph: {
+      images: service.image_url ? [service.image_url] : [],
+    },
   };
 }
 
@@ -64,10 +68,27 @@ export default async function ServiceDetailPage({ params }: { params: Promise<{ 
       <Navbar />
 
       <article className="flex-1 pt-24 pb-20">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        {service.image_url && (
+          <div className="w-full h-[30vh] md:h-[40vh] relative mb-12">
+            <Image
+              src={service.image_url}
+              alt={service.title}
+              fill
+              className="object-cover"
+              priority
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-transparent"></div>
+          </div>
+        )}
+
+        <div className={`max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 ${service.image_url ? '-mt-32 relative z-10' : ''}`}>
           
           {/* Nút quay lại */}
-          <Link href="/services" className="inline-flex items-center gap-2 text-slate-500 hover:text-rose-600 mb-8 font-medium transition-colors">
+          <Link href="/services" className={`inline-flex items-center gap-2 mb-8 font-medium transition-colors ${
+            service.image_url 
+              ? 'text-white/80 hover:text-white bg-black/20 px-4 py-2 rounded-full backdrop-blur-md' 
+              : 'text-slate-500 hover:text-rose-600'
+          }`}>
             <ArrowLeft className="w-4 h-4" /> Quay lại danh sách dịch vụ
           </Link>
 

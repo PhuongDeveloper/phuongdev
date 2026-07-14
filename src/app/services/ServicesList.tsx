@@ -62,7 +62,7 @@ export default function ServicesList({ services }: ServicesListProps) {
           <motion.div key={service.id} variants={itemVariants} className="flex h-full">
             <Card variant="glass" hoverable padding="none" className="w-full flex flex-col relative overflow-hidden group">
               {/* Ảnh Banner */}
-              <div className="relative h-56 bg-slate-100 overflow-hidden shrink-0">
+              <div className="relative aspect-[16/9] w-full bg-slate-100 overflow-hidden shrink-0">
                 {service.image_url ? (
                   <img
                     src={service.image_url}
@@ -73,15 +73,13 @@ export default function ServicesList({ services }: ServicesListProps) {
                   <div className="w-full h-full bg-gradient-to-br from-rose-500 via-rose-600 to-orange-500 flex items-center justify-center transition-transform duration-700 group-hover:scale-105">
                   </div>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-transparent" />
-                <div className="absolute bottom-4 left-6 right-6">
-                  <h3 className="text-2xl font-bold text-white mb-1 line-clamp-1">
-                    {service.title}
-                  </h3>
-                </div>
               </div>
               
-              <div className="p-6 pt-5 flex-1 flex flex-col relative z-10">
+              <div className="p-6 flex-1 flex flex-col relative z-10">
+                {/* Title */}
+                <h3 className="text-xl md:text-2xl font-bold text-slate-900 mb-3 line-clamp-2 group-hover:text-rose-600 transition-colors">
+                  {service.title}
+                </h3>
                 <div className="flex-1 mb-4">
                   {service.price_range && (
                     <span className="inline-block px-3 py-1 bg-rose-50 border border-rose-100 text-sm font-semibold text-rose-700 rounded-full mb-4">
