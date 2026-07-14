@@ -8,6 +8,7 @@ import remarkGfm from 'remark-gfm';
 import Button from '@/components/ui/Button';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import ViewTracker from '@/components/ui/ViewTracker';
 import { formatCurrency } from '@/utils/helpers';
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
@@ -55,6 +56,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="bg-slate-50 min-h-screen flex flex-col">
+      <ViewTracker table="products" slug={product.slug} />
       <Navbar />
 
       <article className="flex-1 pt-24 pb-20">

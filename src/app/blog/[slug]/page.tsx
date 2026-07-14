@@ -31,6 +31,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import ViewTracker from '@/components/ui/ViewTracker';
 
 export default async function BlogDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = await params;
@@ -58,6 +59,7 @@ export default async function BlogDetailPage({ params }: { params: Promise<{ slu
 
   return (
     <div className="bg-white min-h-screen flex flex-col">
+      <ViewTracker table="blogs" slug={blog.slug} />
       <Navbar />
       <article className="pt-24 pb-20 flex-1">
         {/* Cover Image Header */}

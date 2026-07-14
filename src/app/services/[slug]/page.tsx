@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import Button from '@/components/ui/Button';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import ViewTracker from '@/components/ui/ViewTracker';
 import * as LucideIcons from 'lucide-react';
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
@@ -59,6 +60,7 @@ export default async function ServiceDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="bg-slate-50 min-h-screen flex flex-col">
+      <ViewTracker table="services" slug={service.slug} />
       <Navbar />
 
       <article className="flex-1 pt-24 pb-20">
