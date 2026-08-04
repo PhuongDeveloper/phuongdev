@@ -1,153 +1,182 @@
-/* ==========================================================================
-   API Route: /api/payment/sepay-webhook
-   SePay gọi endpoint này khi có tiền về tài khoản ngân hàng
-   ========================================================================== */
-
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+
+import { paymentConfig } from '@/lib/payments/config';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
 
-// Dùng service role để bypass RLS
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_key',
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+type SepayPayload = {
+  id?: number | string;
+  accountNumber?: string;
+  code?: string | null;
+  content?: string;
+  description?: string;
+  transferType?: 'in' | 'out' | string;
+  transferAmount?: number | string;
+  referenceCode?: string;
+};
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    console.log('[SePay Webhook]', JSON.stringify(body, null, 2));
-
-    // Xác thực API key từ SePay (nếu có cấu hình)
-    const sePayToken = request.headers.get('Authorization');
-    const expectedToken = process.env.SEPAY_WEBHOOK_SECRET;
-    if (expectedToken && sePayToken !== `Apikey ${expectedToken}`) {
-      console.warn('[SePay] Invalid token');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // SePay gửi thông tin giao dịch
-    const {
-      id: sepayId,
-      transferAmount,       // Số tiền
-      content,              // Nội dung chuyển khoản
-      referenceCode,        // Mã tham chiếu ngân hàng
-      description,          // Mô tả
-      transactionDate,
-    } = body;
-
-    const transferContent: string = content || description || '';
-    const amount = Number(transferAmount || 0);
-
-    // Tìm mã giao dịch trong nội dung (format: PD + 8 ký tự)
-    const codeMatch = transferContent.match(/PD[A-Z0-9]{8}/i);
-    if (!codeMatch) {
-      console.log('[SePay] No transaction code found in:', transferContent);
-      // Trả về 200 để SePay không retry
-      return NextResponse.json({ success: true, message: 'No matching transaction' });
-    }
-
-    const transactionCode = codeMatch[0].toUpperCase();
-    console.log('[SePay] Found transaction code:', transactionCode);
-
-    // Tìm pending transaction
-    const { data: transaction, error: findError } = await supabaseAdmin
-      .from('transactions')
-      .select('*')
-      .eq('transaction_code', transactionCode)
-      .eq('status', 'pending')
-      .single();
-
-    if (findError || !transaction) {
-      console.log('[SePay] Transaction not found or already processed:', transactionCode);
-      return NextResponse.json({ success: true, message: 'Transaction not found or already processed' });
-    }
-
-    // Kiểm tra hết hạn
-    if (transaction.expires_at && new Date(transaction.expires_at) < new Date()) {
-      await supabaseAdmin
-        .from('transactions')
-        .update({ status: 'expired' })
-        .eq('id', transaction.id);
-      console.log('[SePay] Transaction expired:', transactionCode);
-      return NextResponse.json({ success: true, message: 'Transaction expired' });
-    }
-
-    // Gọi function hoàn tất giao dịch + cộng coin
-    const { data: result, error: rpcError } = await supabaseAdmin
-      .rpc('complete_transaction', {
-        p_transaction_id: transaction.id,
-        p_bank_ref: referenceCode || sepayId?.toString(),
-        p_sepay_data: body,
-      });
-
-    if (rpcError) {
-      console.error('[SePay] RPC error:', rpcError);
-      return NextResponse.json({ error: 'Database error' }, { status: 500 });
-    }
-
-    console.log('[SePay] Transaction completed:', result);
-
-    // Gửi email xác nhận nạp tiền
-    if (result?.success) {
-      const { data: userProfile } = await supabaseAdmin
-        .from('user_profiles')
-        .select('email, display_name, coin_balance')
-        .eq('id', transaction.user_id)
-        .single();
-
-      if (userProfile?.email) {
-        // Fire-and-forget email
-        fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email/send-recharge`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET || '' },
-          body: JSON.stringify({
-            email: userProfile.email,
-            display_name: userProfile.display_name,
-            amount: transaction.amount,
-            transaction_code: transactionCode,
-            new_balance: userProfile.coin_balance,
-          }),
-        }).catch(console.error);
-      }
-    }
-
-    return NextResponse.json({ success: true, result });
-  } catch (error) {
-    console.error('[SePay] Webhook error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+function secureEqual(left: string, right: string) {
+  const a = Buffer.from(left);
+  const b = Buffer.from(right);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
-// GET: endpoint kiểm tra trạng thái transaction (dùng cho polling)
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const transactionId = searchParams.get('transaction_id');
-    const transactionCode = searchParams.get('code');
+function verifyWebhook(request: NextRequest, rawBody: string) {
+  const signature = request.headers.get('x-sepay-signature');
+  const timestamp = request.headers.get('x-sepay-timestamp');
+  const hmacSecret = process.env.SEPAY_WEBHOOK_HMAC_SECRET;
 
-    if (!transactionId && !transactionCode) {
-      return NextResponse.json({ error: 'Missing transaction_id or code' }, { status: 400 });
+  if (signature && timestamp && hmacSecret) {
+    const timestampNumber = Number(timestamp);
+    if (!Number.isFinite(timestampNumber) || Math.abs(Date.now() / 1000 - timestampNumber) > 300) {
+      return false;
     }
-
-    let query = supabaseAdmin.from('transactions').select('id, status, amount, coin_amount, completed_at, transaction_code');
-
-    if (transactionId) {
-      query = query.eq('id', transactionId);
-    } else if (transactionCode) {
-      query = query.eq('transaction_code', transactionCode);
-    }
-
-    const { data, error } = await query.single();
-
-    if (error || !data) {
-      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
-    }
-
-    return NextResponse.json(data);
-  } catch (error) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    const digest = createHmac('sha256', hmacSecret)
+      .update(`${timestamp}.${rawBody}`)
+      .digest('hex');
+    return secureEqual(`sha256=${digest}`, signature);
   }
+
+  const apiKey = process.env.SEPAY_WEBHOOK_SECRET;
+  const authorization = request.headers.get('authorization') || '';
+  return Boolean(apiKey && secureEqual(authorization, `Apikey ${apiKey}`));
+}
+
+async function sendInternalEmail(path: string, body: Record<string, unknown>) {
+  const internalSecret = process.env.INTERNAL_API_SECRET;
+  if (!internalSecret) return;
+
+  await fetch(`${paymentConfig.appUrl}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-internal-secret': internalSecret },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function POST(request: NextRequest) {
+  const rawBody = await request.text();
+
+  if (!verifyWebhook(request, rawBody)) {
+    return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+  }
+
+  let payload: SepayPayload;
+  try {
+    payload = JSON.parse(rawBody) as SepayPayload;
+  } catch {
+    return NextResponse.json({ success: false, message: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const providerId = String(payload.id ?? '').trim();
+  const amount = Number(payload.transferAmount);
+  const transferText = `${payload.code || ''} ${payload.content || ''} ${payload.description || ''}`;
+  const code = transferText.match(/PD[A-Z0-9]{8,10}/i)?.[0]?.toUpperCase() || null;
+  const admin = createAdminClient();
+
+  if (!providerId || !Number.isSafeInteger(amount) || amount <= 0) {
+    return NextResponse.json({ success: false, message: 'Invalid payload' }, { status: 400 });
+  }
+
+  const { error: eventError } = await admin.from('payment_events').insert({
+    provider: 'sepay',
+    provider_transaction_id: providerId,
+    transaction_code: code,
+    transfer_amount: amount,
+    status: 'received',
+    raw_payload: payload,
+  });
+
+  if (eventError?.code === '23505') {
+    return NextResponse.json({ success: true });
+  }
+  if (eventError) {
+    console.error('[SePay] Could not persist event', eventError);
+    return NextResponse.json({ success: false }, { status: 500 });
+  }
+
+  const reject = async (reason: string, status: 'unmatched' | 'rejected' = 'rejected') => {
+    await admin
+      .from('payment_events')
+      .update({ status, reason })
+      .eq('provider', 'sepay')
+      .eq('provider_transaction_id', providerId);
+    return NextResponse.json({ success: true });
+  };
+
+  if (payload.transferType !== 'in') return reject('Giao dịch không phải tiền vào');
+  if (payload.accountNumber && payload.accountNumber !== paymentConfig.accountNumber) {
+    return reject('Sai tài khoản nhận');
+  }
+  if (!code) return reject('Không tìm thấy mã thanh toán', 'unmatched');
+
+  const { data: transaction } = await admin
+    .from('transactions')
+    .select('id, user_id, amount, purpose, status, transaction_code')
+    .eq('transaction_code', code)
+    .maybeSingle();
+
+  if (!transaction) return reject('Không tìm thấy giao dịch chờ đối soát', 'unmatched');
+  if (Number(transaction.amount) !== amount) {
+    return reject(`Sai số tiền: cần ${transaction.amount}, nhận ${amount}`);
+  }
+
+  const { data: result, error: rpcError } = await admin.rpc('complete_payment_transaction', {
+    p_transaction_id: transaction.id,
+    p_received_amount: amount,
+    p_provider_transaction_id: providerId,
+    p_bank_ref: payload.referenceCode || providerId,
+    p_payload: payload,
+  });
+
+  if (rpcError) {
+    console.error('[SePay] Completion RPC failed', rpcError);
+    return NextResponse.json({ success: false }, { status: 500 });
+  }
+
+  if (result?.duplicate) return reject('Mã thanh toán đã được xử lý trước đó');
+  if (!result?.success) return reject(result?.error || 'Không thể hoàn tất giao dịch');
+
+  await admin
+    .from('payment_events')
+    .update({ status: 'matched', reason: null })
+    .eq('provider', 'sepay')
+    .eq('provider_transaction_id', providerId);
+
+  const { data: profile } = await admin
+    .from('user_profiles')
+    .select('email, display_name, coin_balance')
+    .eq('id', result.user_id)
+    .single();
+
+  if (profile?.email) {
+    const emailPromise = result.purpose === 'order'
+      ? sendInternalEmail('/api/email/send-delivery', {
+          email: profile.email,
+          display_name: profile.display_name,
+          product_title: result.product_title,
+          variant_name: result.variant_name,
+          key_value: result.key_value,
+          delivery_data: result.delivery_data,
+          download_url: result.download_url,
+          delivery_intro: result.delivery_intro,
+          delivery_note: result.delivery_note,
+          order_id: result.order_id,
+          amount: result.amount,
+          payment_method: 'bank_qr',
+        })
+      : sendInternalEmail('/api/email/send-recharge', {
+          email: profile.email,
+          display_name: profile.display_name,
+          amount,
+          transaction_code: code,
+          new_balance: profile.coin_balance,
+        });
+
+    emailPromise.catch((error) => console.error('[SePay] Email error', error));
+  }
+
+  // SePay considers exactly this success shape a successful delivery.
+  return NextResponse.json({ success: true });
 }

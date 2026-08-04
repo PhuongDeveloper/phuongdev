@@ -71,11 +71,45 @@ export interface Product {
   has_key: boolean;              // Tool có dạng key bản quyền
   delivery_intro: string | null; // Lời cảm ơn tùy chỉnh (2-5 dòng) gửi trong email
   delivery_note: string | null;  // Hướng dẫn sử dụng chi tiết (Markdown)
+  gallery_images: string[];
+  badge: string | null;
+  total_sold: number;
+  is_featured: boolean;
+  fulfillment_time: string;
+  warranty_text: string;
   sort_order: number;
   views: number;
   created_at: string;
   updated_at: string;
 }
+
+/** Gói bán của một sản phẩm: miễn phí, 1 tháng, 1 năm... */
+export interface ProductVariant {
+  id: string;
+  product_id: string;
+  name: string;
+  sku: string;
+  short_description: string;
+  duration_label: string | null;
+  price: number;
+  compare_at_price: number | null;
+  inventory_policy: 'finite' | 'unlimited';
+  stock_quantity: number;
+  sold_count: number;
+  purchase_limit: number;
+  key_type: 'trial' | 'permanent';
+  download_url: string | null;
+  delivery_note: string | null;
+  is_active: boolean;
+  is_featured: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ProductWithVariants = Product & {
+  product_variants: ProductVariant[];
+};
 
 /** Bài viết Blog công nghệ */
 export interface Blog {
@@ -131,6 +165,8 @@ export interface Transaction {
   status: 'pending' | 'completed' | 'failed' | 'expired';
   transaction_code: string;   // Mã nội dung chuyển khoản
   payment_method: string;
+  purpose: 'recharge' | 'order';
+  provider_transaction_id: string | null;
   bank_ref: string | null;
   sepay_data: Record<string, unknown> | null;
   expires_at: string | null;
@@ -142,11 +178,14 @@ export interface Transaction {
 export interface ProductKey {
   id: string;
   product_id: string;
+  variant_id: string | null;
   key_value: string;
   key_type: 'trial' | 'permanent';
   is_used: boolean;
   used_by: string | null;
   used_at: string | null;
+  reserved_order_id: string | null;
+  order_id: string | null;
   created_at: string;
 }
 
@@ -156,11 +195,18 @@ export interface Order {
   user_id: string;
   product_id: string;
   product_title: string;
+  variant_id: string | null;
+  variant_name: string | null;
+  sku: string | null;
+  unit_price: number;
+  quantity: number;
   amount: number;
   payment_method: 'coin' | 'bank_qr' | 'free_trial';
   status: 'pending' | 'completed' | 'failed';
   key_id: string | null;
   key_value: string | null;
+  delivery_data: Array<Record<string, string | null>>;
+  inventory_reserved: boolean;
   transaction_id: string | null;
   email_sent: boolean;
   completed_at: string | null;
@@ -183,6 +229,9 @@ export type CategoryUpdate = Partial<CategoryInsert>;
 
 export type ProductInsert = Omit<Product, 'id' | 'created_at' | 'updated_at' | 'views'> & { views?: number };
 export type ProductUpdate = Partial<ProductInsert>;
+
+export type ProductVariantInsert = Omit<ProductVariant, 'id' | 'created_at' | 'updated_at'>;
+export type ProductVariantUpdate = Partial<ProductVariantInsert>;
 
 export type BlogInsert = Omit<Blog, 'id' | 'created_at' | 'updated_at' | 'views'> & { views?: number };
 export type BlogUpdate = Partial<BlogInsert>;

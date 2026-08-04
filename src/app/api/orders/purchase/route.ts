@@ -1,223 +1,160 @@
-/* ==========================================================================
-   API Route: /api/orders/purchase
-   Xử lý mua hàng bằng coin hoặc tạo QR bank thanh toán trực tiếp
-   ========================================================================== */
-
 import { NextRequest, NextResponse } from 'next/server';
+
+import { createVietQrUrl, paymentConfig, publicBankDetails } from '@/lib/payments/config';
+import { createTransactionCode } from '@/lib/payments/transaction-code';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
-import { createClient as supabaseAdminCreate } from '@supabase/supabase-js';
 
-const supabaseAdmin = supabaseAdminCreate(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_key',
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+type PurchasePayload = {
+  product_id?: string;
+  variant_id?: string;
+  quantity?: number;
+  payment_method?: 'coin' | 'bank_qr';
+};
 
-const BANK_ID = 'BIDV';
-const ACCOUNT_NO = '8811430066';
-const ACCOUNT_NAME = 'TRAN MINH PHUONG';
+async function sendDeliveryEmail(body: Record<string, unknown>) {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) return;
+
+  await fetch(`${paymentConfig.appUrl}/api/email/send-delivery`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
+    body: JSON.stringify(body),
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Vui lòng đăng nhập để mua hàng.' }, { status: 401 });
 
-    if (!user) {
-      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 });
+    const payload = (await request.json()) as PurchasePayload;
+    const quantity = Number(payload.quantity ?? 1);
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100) {
+      return NextResponse.json({ error: 'Số lượng không hợp lệ.' }, { status: 400 });
+    }
+    if (!payload.payment_method || !['coin', 'bank_qr'].includes(payload.payment_method)) {
+      return NextResponse.json({ error: 'Phương thức thanh toán không hợp lệ.' }, { status: 400 });
     }
 
-    const { product_id, payment_method } = await request.json();
+    const admin = createAdminClient();
+    let variantId = payload.variant_id;
 
-    if (!product_id || !payment_method) {
-      return NextResponse.json({ error: 'Thiếu thông tin đơn hàng' }, { status: 400 });
+    // Backwards compatibility for older clients that only submit product_id.
+    if (!variantId && payload.product_id) {
+      const { data: defaultVariant } = await admin
+        .from('product_variants')
+        .select('id')
+        .eq('product_id', payload.product_id)
+        .eq('is_active', true)
+        .order('is_featured', { ascending: false })
+        .order('sort_order', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      variantId = defaultVariant?.id;
     }
 
-    if (!['coin', 'bank_qr'].includes(payment_method)) {
-      return NextResponse.json({ error: 'Phương thức thanh toán không hợp lệ' }, { status: 400 });
-    }
+    if (!variantId) return NextResponse.json({ error: 'Vui lòng chọn một gói sản phẩm.' }, { status: 400 });
 
-    // Lấy thông tin sản phẩm
-    const { data: product, error: productError } = await supabaseAdmin
-      .from('products')
-      .select('*')
-      .eq('id', product_id)
+    const { data: variant } = await admin
+      .from('product_variants')
+      .select('id, product_id, name, price, download_url, delivery_note, products!inner(*)')
+      .eq('id', variantId)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
+    if (!variant) return NextResponse.json({ error: 'Gói sản phẩm không còn được bán.' }, { status: 404 });
 
-    if (productError || !product) {
-      return NextResponse.json({ error: 'Sản phẩm không tồn tại hoặc đã dừng bán' }, { status: 404 });
-    }
+    const product = Array.isArray(variant.products) ? variant.products[0] : variant.products;
 
-    if (product.price <= 0) {
-      return NextResponse.json({ error: 'Sản phẩm này miễn phí, không cần mua' }, { status: 400 });
-    }
+    if (payload.payment_method === 'coin') {
+      const { data: result, error } = await admin.rpc('purchase_variant_with_wallet', {
+        p_user_id: user.id,
+        p_variant_id: variantId,
+        p_quantity: quantity,
+      });
 
-    // === THANH TOÁN BẰNG COIN ===
-    if (payment_method === 'coin') {
-      // Lấy số dư coin
-      const { data: profile, error: profileError } = await supabaseAdmin
+      if (error) {
+        console.error('[Purchase] Wallet RPC error', error);
+        return NextResponse.json({ error: 'Không thể hoàn tất thanh toán.' }, { status: 500 });
+      }
+      if (!result?.success) {
+        return NextResponse.json(
+          { error: result?.error || 'Không thể hoàn tất thanh toán.', need_recharge: result?.need_recharge },
+          { status: 400 },
+        );
+      }
+
+      const { data: profile } = await admin
         .from('user_profiles')
-        .select('coin_balance, email, display_name, total_spent')
+        .select('email, display_name')
         .eq('id', user.id)
         .single();
 
-      if (profileError || !profile) {
-        return NextResponse.json({ error: 'Không tìm thấy hồ sơ người dùng' }, { status: 404 });
+      if (profile?.email) {
+        sendDeliveryEmail({
+          email: profile.email,
+          display_name: profile.display_name,
+          product_title: product?.title,
+          product_image: product?.image_url,
+          variant_name: variant.name,
+          key_value: result.key_value,
+          delivery_data: result.delivery_data,
+          download_url: result.download_url,
+          delivery_intro: result.delivery_intro,
+          delivery_note: result.delivery_note,
+          order_id: result.order_id,
+          amount: result.amount,
+          payment_method: Number(variant.price) === 0 ? 'free_trial' : 'coin',
+        }).catch((emailError) => console.error('[Purchase] Delivery email error', emailError));
       }
-
-      if (profile.coin_balance < product.price) {
-        return NextResponse.json({
-          error: `Số dư không đủ. Bạn có ${profile.coin_balance.toLocaleString('vi-VN')} coin, cần ${product.price.toLocaleString('vi-VN')} coin.`,
-          need_recharge: true,
-        }, { status: 400 });
-      }
-
-      // Lấy key permanent
-      let keyData = null;
-      if (product.has_key) {
-        const { data: availableKey } = await supabaseAdmin
-          .from('product_keys')
-          .select('*')
-          .eq('product_id', product_id)
-          .eq('key_type', 'permanent')
-          .eq('is_used', false)
-          .limit(1)
-          .single();
-
-        if (!availableKey) {
-          return NextResponse.json({ error: 'Hết key bản quyền. Vui lòng liên hệ admin.' }, { status: 400 });
-        }
-        keyData = availableKey;
-      }
-
-      // Trừ coin & cộng total_spent
-      const { error: deductError } = await supabaseAdmin
-        .from('user_profiles')
-        .update({
-          coin_balance: profile.coin_balance - product.price,
-          total_spent: (profile.total_spent || 0) + product.price,
-        })
-        .eq('id', user.id);
-
-      if (deductError) {
-        return NextResponse.json({ error: 'Không thể trừ coin' }, { status: 500 });
-      }
-
-      // Tạo order
-      const { data: order, error: orderError } = await supabaseAdmin
-        .from('orders')
-        .insert({
-          user_id: user.id,
-          product_id,
-          product_title: product.title,
-          amount: product.price,
-          payment_method: 'coin',
-          status: 'completed',
-          key_id: keyData?.id || null,
-          key_value: keyData?.key_value || null,
-          completed_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (orderError || !order) {
-        return NextResponse.json({ error: 'Không thể tạo đơn hàng' }, { status: 500 });
-      }
-
-      // Đánh dấu key đã dùng
-      if (keyData) {
-        await supabaseAdmin
-          .from('product_keys')
-          .update({ is_used: true, used_by: user.id, used_at: new Date().toISOString() })
-          .eq('id', keyData.id);
-      }
-
-      // Gửi email tài liệu bàn giao
-      const emailPayload = {
-        email: profile.email || user.email,
-        display_name: profile.display_name,
-        product_title: product.title,
-        product_image: product.image_url,
-        key_value: keyData?.key_value || null,
-        key_type: keyData ? 'permanent' : null,
-        download_url: product.download_url,
-        delivery_intro: product.delivery_intro,
-        delivery_note: product.delivery_note,
-        order_id: order.id,
-        amount: product.price,
-        payment_method: 'coin',
-      };
-
-      fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email/send-delivery`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET || '' },
-        body: JSON.stringify(emailPayload),
-      }).catch(console.error);
 
       return NextResponse.json({
-        success: true,
-        order_id: order.id,
-        key_value: keyData?.key_value || null,
-        download_url: product.download_url,
-        delivery_intro: product.delivery_intro,
-        delivery_note: product.delivery_note,
-        message: 'Thanh toán thành công! Email xác nhận đã được gửi.',
+        ...result,
+        message: Number(variant.price) === 0
+          ? 'Đã nhận gói miễn phí.'
+          : 'Thanh toán thành công. Sản phẩm đã được bàn giao.',
       });
     }
 
-    // === THANH TOÁN QR BANK TRỰC TIẾP ===
-    if (payment_method === 'bank_qr') {
-      const randomPart = Math.random().toString(36).substring(2, 10).toUpperCase();
-      const transactionCode = `PD${randomPart}`;
-      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-
-      // Tạo pending transaction
-      const { data: transaction, error: txError } = await supabaseAdmin
-        .from('transactions')
-        .insert({
-          user_id: user.id,
-          amount: product.price,
-          coin_amount: 0, // Không cộng coin, xử lý thẳng
-          status: 'pending',
-          transaction_code: transactionCode,
-          payment_method: 'bank_qr',
-          expires_at: expiresAt,
-        })
-        .select()
-        .single();
-
-      if (txError || !transaction) {
-        return NextResponse.json({ error: 'Không thể tạo giao dịch' }, { status: 500 });
-      }
-
-      // Tạo pending order
-      await supabaseAdmin.from('orders').insert({
-        user_id: user.id,
-        product_id,
-        product_title: product.title,
-        amount: product.price,
-        payment_method: 'bank_qr',
-        status: 'pending',
-        transaction_id: transaction.id,
-      });
-
-      const addInfo = encodeURIComponent(transactionCode);
-      const qrUrl = `https://img.vietqr.io/image/${BANK_ID}-${ACCOUNT_NO}-compact2.png?amount=${product.price}&addInfo=${addInfo}&accountName=${encodeURIComponent(ACCOUNT_NAME)}`;
-
-      return NextResponse.json({
-        success: true,
-        payment_method: 'bank_qr',
-        qr_url: qrUrl,
-        transaction_code: transactionCode,
-        transaction_id: transaction.id,
-        amount: product.price,
-        expires_at: expiresAt,
-        bank: { bank_id: BANK_ID, account_no: ACCOUNT_NO, account_name: ACCOUNT_NAME },
-      });
+    if (Number(variant.price) <= 0) {
+      return NextResponse.json({ error: 'Gói miễn phí không cần chuyển khoản.' }, { status: 400 });
     }
 
+    const transactionCode = createTransactionCode();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const { data: result, error } = await admin.rpc('create_bank_variant_purchase', {
+      p_user_id: user.id,
+      p_variant_id: variantId,
+      p_quantity: quantity,
+      p_transaction_code: transactionCode,
+      p_expires_at: expiresAt,
+    });
+
+    if (error) {
+      console.error('[Purchase] Bank reservation RPC error', error);
+      return NextResponse.json({ error: 'Không thể giữ hàng và tạo giao dịch.' }, { status: 500 });
+    }
+    if (!result?.success) {
+      return NextResponse.json({ error: result?.error || 'Không thể tạo giao dịch.' }, { status: 400 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      payment_method: 'bank_qr',
+      qr_url: createVietQrUrl(Number(result.amount), transactionCode),
+      transaction_code: transactionCode,
+      transaction_id: result.transaction_id,
+      order_id: result.order_id,
+      amount: Number(result.amount),
+      expires_at: expiresAt,
+      bank: publicBankDetails(),
+    });
   } catch (error) {
-    console.error('[Purchase]', error);
-    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 });
+    console.error('[Purchase] Unexpected error', error);
+    return NextResponse.json({ error: 'Hệ thống mua hàng đang bận. Vui lòng thử lại.' }, { status: 500 });
   }
 }
+

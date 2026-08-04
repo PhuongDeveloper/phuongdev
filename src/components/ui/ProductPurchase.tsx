@@ -1,345 +1,434 @@
-/* ==========================================================================
-   ProductPurchase - Luồng mua hàng trên trang chi tiết sản phẩm
-   Hiển thị khi sản phẩm có has_key = true hoặc price > 0
-   ========================================================================== */
-
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  ShoppingCart, Gift, Coins, QrCode, Copy, Check, Clock,
-  AlertCircle, CheckCircle2, Key, Download, Loader2, RefreshCw, X,
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
-import { createClient } from '@/lib/supabase/client';
-import Button from '@/components/ui/Button';
-import { cn } from '@/utils/helpers';
-import type { Product, UserProfile } from '@/lib/types/database';
+import {
+  AlertCircle,
+  Check,
+  CheckCircle2,
+  Clock3,
+  Coins,
+  Copy,
+  Download,
+  KeyRound,
+  Minus,
+  Plus,
+  QrCode,
+  RefreshCw,
+  ShieldCheck,
+  ShoppingBag,
+  WalletCards,
+  X,
+  Zap,
+} from 'lucide-react';
 
-interface ProductPurchaseProps {
-  product: Product;
-}
+import { createClient } from '@/lib/supabase/client';
+import type { Product, ProductVariant, UserProfile } from '@/lib/types/database';
+import { cn } from '@/utils/helpers';
 
 type PurchaseStatus = 'idle' | 'loading' | 'qr_pending' | 'success' | 'error';
 
-interface SuccessData {
-  key_value: string | null;
-  download_url: string | null;
-  delivery_intro: string | null;
-  delivery_note: string | null;
-  message: string;
-}
+type DeliveryItem = { key?: string; type?: string; download_url?: string | null; note?: string | null };
 
-interface QRData {
+type SuccessData = {
+  key_value?: string | null;
+  delivery_data?: DeliveryItem[];
+  download_url?: string | null;
+  delivery_intro?: string | null;
+  delivery_note?: string | null;
+  message?: string;
+};
+
+type QrData = {
   qr_url: string;
   transaction_code: string;
   transaction_id: string;
   amount: number;
   expires_at: string;
+  bank?: { bank_id: string; account_no: string; account_name: string };
+};
+
+type ProductPurchaseProps = {
+  product: Product;
+  variants: ProductVariant[];
+};
+
+function formatPrice(value: number) {
+  return value === 0 ? 'Miễn phí' : `${value.toLocaleString('vi-VN')}đ`;
 }
 
-function CopyButton({ text, size = 'sm' }: { text: string; size?: 'sm' | 'md' }) {
+function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
-  const handle = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
   return (
-    <button onClick={handle} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer">
-      {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+    <button
+      type="button"
+      className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-900"
+      onClick={async () => {
+        await navigator.clipboard.writeText(value);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1800);
+      }}
+      aria-label="Sao chép"
+    >
+      {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
     </button>
   );
 }
 
-export default function ProductPurchase({ product }: ProductPurchaseProps) {
+export default function ProductPurchase({ product, variants }: ProductPurchaseProps) {
+  const availableVariants = useMemo(
+    () => variants.filter((variant) => variant.is_active).sort((a, b) => Number(b.is_featured) - Number(a.is_featured) || a.sort_order - b.sort_order),
+    [variants],
+  );
+  const [selectedId, setSelectedId] = useState(availableVariants[0]?.id || '');
+  const [quantity, setQuantity] = useState(1);
+  const [status, setStatus] = useState<PurchaseStatus>('idle');
+  const [error, setError] = useState('');
+  const [successData, setSuccessData] = useState<SuccessData | null>(null);
+  const [qrData, setQrData] = useState<QrData | null>(null);
+  const [countdown, setCountdown] = useState(0);
+  const [checking, setChecking] = useState(false);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [status, setStatus] = useState<PurchaseStatus>('idle');
-  const [error, setError] = useState<string | null>(null);
-  const [successData, setSuccessData] = useState<SuccessData | null>(null);
-  const [qrData, setQrData] = useState<QRData | null>(null);
-  const [countdown, setCountdown] = useState(0);
-  const [polling, setPolling] = useState(false);
-  const [showAuthHint, setShowAuthHint] = useState(false);
+  const [showLoginHint, setShowLoginHint] = useState(false);
+  const [supabase] = useState(() => createClient());
 
-  const supabase = createClient();
+  const selected = availableVariants.find((variant) => variant.id === selectedId) || availableVariants[0];
+  const isOutOfStock = !selected || (selected.inventory_policy === 'finite' && selected.stock_quantity <= 0);
+  const maxQuantity = selected
+    ? Math.max(1, Math.min(selected.purchase_limit, selected.inventory_policy === 'finite' ? selected.stock_quantity : selected.purchase_limit))
+    : 1;
+  const total = selected ? selected.price * quantity : 0;
+
+  const loadProfile = useCallback(async (userId: string) => {
+    const { data } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
+    setProfile(data);
+  }, [supabase]);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const { data } = await supabase.from('user_profiles').select('*').eq('id', session.user.id).single();
-        setProfile(data);
-      } else {
-        setProfile(null);
-      }
+    supabase.auth.getUser().then(({ data }) => {
+      const currentUser = data.user ? { id: data.user.id, email: data.user.email } : null;
+      setUser(currentUser);
+      if (currentUser) loadProfile(currentUser.id);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const currentUser = session?.user ? { id: session.user.id, email: session.user.email } : null;
+      setUser(currentUser);
+      if (currentUser) loadProfile(currentUser.id);
+      else setProfile(null);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [loadProfile, supabase]);
 
-  // Countdown QR
   useEffect(() => {
     if (status !== 'qr_pending' || !qrData) return;
-    const expiresAt = new Date(qrData.expires_at).getTime();
     const tick = () => {
-      const diff = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-      setCountdown(diff);
-      if (diff === 0) { setStatus('idle'); setQrData(null); }
+      const seconds = Math.max(0, Math.floor((new Date(qrData.expires_at).getTime() - Date.now()) / 1000));
+      setCountdown(seconds);
+      if (seconds === 0) {
+        setError('Mã QR đã hết hạn. Hàng giữ chỗ đã được trả lại kho.');
+        setStatus('error');
+      }
     };
     tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [status, qrData]);
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [qrData, status]);
 
-  // Polling QR order
-  const checkQRStatus = useCallback(async () => {
-    if (!qrData || polling) return;
-    setPolling(true);
+  const checkPayment = useCallback(async () => {
+    if (!qrData || checking) return;
+    setChecking(true);
     try {
-      const res = await fetch(`/api/payment/sepay-webhook?transaction_id=${qrData.transaction_id}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === 'completed') {
-          // Lấy order tương ứng
-          const orderRes = await supabase.from('orders').select('*').eq('transaction_id', qrData.transaction_id).eq('status', 'completed').single();
-          setSuccessData({
-            key_value: orderRes.data?.key_value || null,
-            download_url: product.download_url,
-            delivery_intro: product.delivery_intro,
-            delivery_note: product.delivery_note,
-            message: 'Thanh toán thành công! Email xác nhận đã được gửi.',
-          });
-          setStatus('success');
-          // Reload profile
-          const { data: newProfile } = await supabase.from('user_profiles').select('*').eq('id', user!.id).single();
-          setProfile(newProfile);
-        }
+      const response = await fetch(`/api/payment/status?transaction_id=${encodeURIComponent(qrData.transaction_id)}`, { cache: 'no-store' });
+      const data = await response.json();
+      if (response.ok && data.status === 'completed') {
+        const delivery = (data.order?.delivery_data || []) as DeliveryItem[];
+        setSuccessData({
+          delivery_data: delivery,
+          key_value: data.order?.key_value,
+          download_url: data.delivery?.download_url || delivery.find((item) => item.download_url)?.download_url,
+          delivery_intro: data.delivery?.delivery_intro,
+          delivery_note: data.delivery?.delivery_note || delivery.find((item) => item.note)?.note,
+          message: 'Thanh toán đã được xác nhận và sản phẩm đã bàn giao.',
+        });
+        setStatus('success');
+        if (user) loadProfile(user.id);
+      } else if (data.status === 'expired') {
+        setError('Giao dịch đã hết hạn. Vui lòng tạo mã QR mới.');
+        setStatus('error');
       }
-    } catch { /* ignore */ }
-    setPolling(false);
-  }, [qrData, polling, product, user]);
+    } catch {
+      // Keep polling. A temporary network error must not cancel the order.
+    } finally {
+      setChecking(false);
+    }
+  }, [checking, loadProfile, product, qrData, selected, user]);
 
   useEffect(() => {
     if (status !== 'qr_pending') return;
-    const interval = setInterval(checkQRStatus, 5000);
-    return () => clearInterval(interval);
-  }, [status, checkQRStatus]);
+    const timer = window.setInterval(checkPayment, 4000);
+    return () => window.clearInterval(timer);
+  }, [checkPayment, status]);
+
+  const selectVariant = (id: string) => {
+    setSelectedId(id);
+    setQuantity(1);
+    setStatus('idle');
+    setError('');
+    setQrData(null);
+    setSuccessData(null);
+  };
 
   const requireAuth = () => {
-    if (!user) { setShowAuthHint(true); return false; }
-    return true;
+    if (user) return true;
+    setShowLoginHint(true);
+    document.getElementById('navbar-login-btn')?.click();
+    return false;
   };
 
-  const handleGetTrialKey = async () => {
-    if (!requireAuth()) return;
-    setStatus('loading'); setError(null);
-    const res = await fetch('/api/orders/get-trial-key', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: product.id }),
-    });
-    const data = await res.json();
-    if (!res.ok) { setError(data.error); setStatus('error'); return; }
-    setSuccessData(data);
-    setStatus('success');
+  const purchase = async (paymentMethod: 'coin' | 'bank_qr') => {
+    if (!selected || isOutOfStock || !requireAuth()) return;
+    setStatus('loading');
+    setError('');
+    try {
+      const response = await fetch('/api/orders/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: product.id,
+          variant_id: selected.id,
+          quantity,
+          payment_method: paymentMethod,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Không thể tạo đơn hàng.');
+
+      if (paymentMethod === 'bank_qr') {
+        setQrData(data);
+        setStatus('qr_pending');
+      } else {
+        setSuccessData(data);
+        setStatus('success');
+        if (user) loadProfile(user.id);
+      }
+    } catch (purchaseError) {
+      setError(purchaseError instanceof Error ? purchaseError.message : 'Không thể tạo đơn hàng.');
+      setStatus('error');
+    }
   };
 
-  const handlePurchaseCoin = async () => {
-    if (!requireAuth()) return;
-    setStatus('loading'); setError(null);
-    const res = await fetch('/api/orders/purchase', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: product.id, payment_method: 'coin' }),
-    });
-    const data = await res.json();
-    if (!res.ok) { setError(data.error); setStatus('error'); return; }
-    setSuccessData(data);
-    setStatus('success');
-    const { data: newProfile } = await supabase.from('user_profiles').select('*').eq('id', user!.id).single();
-    setProfile(newProfile);
-  };
+  if (!selected) {
+    return (
+      <aside className="rounded-[28px] border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
+        <AlertCircle className="mb-3 h-6 w-6 text-amber-400" />
+        <h2 className="font-bold">Chưa có gói đang bán</h2>
+        <p className="mt-1 text-sm text-slate-500">Sản phẩm này đang được cập nhật bảng giá.</p>
+      </aside>
+    );
+  }
 
-  const handlePurchaseQR = async () => {
-    if (!requireAuth()) return;
-    setStatus('loading'); setError(null);
-    const res = await fetch('/api/orders/purchase', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: product.id, payment_method: 'bank_qr' }),
-    });
-    const data = await res.json();
-    if (!res.ok) { setError(data.error); setStatus('error'); return; }
-    setQrData(data);
-    setStatus('qr_pending');
-  };
-
-  const formatTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-
-  // Không hiển thị gì nếu sản phẩm miễn phí và không có key
-  if (product.price === 0 && !product.has_key) return null;
+  const deliveryKeys = successData?.delivery_data?.filter((item) => item.key) || [];
 
   return (
-    <div className="space-y-3">
-      {/* Auth hint */}
-      <AnimatePresence>
-        {showAuthHint && !user && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="flex items-center gap-2.5 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>Vui lòng <button onClick={() => { setShowAuthHint(false); const btn = document.getElementById('navbar-login-btn'); btn?.click(); }} className="underline font-semibold cursor-pointer">đăng nhập</button> để mua hàng.</span>
-            <button onClick={() => setShowAuthHint(false)} className="ml-auto text-amber-600 hover:text-amber-800 cursor-pointer"><X className="w-4 h-4" /></button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Error */}
-      <AnimatePresence>
-        {status === 'error' && error && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="flex items-start gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">{error}</div>
-            <button onClick={() => setStatus('idle')} className="text-red-400 hover:text-red-600 cursor-pointer"><X className="w-4 h-4" /></button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* User coin balance */}
-      {user && profile && (
-        <div className="flex items-center gap-1.5 text-xs text-slate-500 px-1">
-          <Coins className="w-3.5 h-3.5 text-rose-500" />
-          Số dư ví: <span className="font-semibold text-slate-700">{(profile.coin_balance ?? 0).toLocaleString('vi-VN')} VND</span>
+    <aside className="rounded-[28px] border border-slate-200 bg-white p-4 text-slate-900 shadow-xl shadow-slate-200/70 lg:sticky lg:top-24">
+      <div className="border-b border-slate-100 px-2 pb-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Gói đang chọn</p>
+            <p className="mt-1 text-3xl font-black tracking-tight text-rose-600">{formatPrice(total)}</p>
+          </div>
+          <span className={cn(
+            'mt-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold',
+            isOutOfStock ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700',
+          )}>
+            <span className={cn('h-1.5 w-1.5 rounded-full', isOutOfStock ? 'bg-red-400' : 'bg-emerald-400')} />
+            {isOutOfStock ? 'Hết hàng' : 'Còn hàng'}
+          </span>
         </div>
-      )}
+        {selected.compare_at_price && selected.compare_at_price > selected.price && (
+          <p className="mt-1 text-sm text-slate-400 line-through">{formatPrice(selected.compare_at_price * quantity)}</p>
+        )}
+      </div>
 
-      {/* Buttons */}
+      <div className="px-2 py-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-bold">Chọn thời hạn & phiên bản</h2>
+          <span className="text-[11px] text-slate-400">{availableVariants.length} lựa chọn</span>
+        </div>
+        <div className="max-h-[355px] space-y-2 overflow-y-auto pr-1">
+          {availableVariants.map((variant) => {
+            const out = variant.inventory_policy === 'finite' && variant.stock_quantity <= 0;
+            const active = variant.id === selected.id;
+            return (
+              <button
+                type="button"
+                key={variant.id}
+                disabled={out}
+                onClick={() => selectVariant(variant.id)}
+                className={cn(
+                  'group relative w-full rounded-2xl border p-3 text-left transition',
+                  active ? 'border-rose-500 bg-rose-50/70 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
+                  out && 'cursor-not-allowed opacity-40',
+                )}
+              >
+                <div className="flex gap-3">
+                  <span className={cn(
+                    'mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl border',
+                    active ? 'border-rose-200 bg-rose-100 text-rose-600' : 'border-slate-200 bg-slate-50 text-slate-400',
+                  )}>
+                    <KeyRound className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-start justify-between gap-3">
+                      <span className="font-bold leading-snug">{variant.name}</span>
+                      <span className={cn('shrink-0 text-sm font-black', active ? 'text-rose-600' : 'text-slate-700')}>
+                        {formatPrice(variant.price)}
+                      </span>
+                    </span>
+                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">
+                      {variant.short_description || variant.duration_label || `Mã gói ${variant.sku}`}
+                    </span>
+                    <span className="mt-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      <span>{variant.inventory_policy === 'unlimited' ? 'Kho không giới hạn' : `Còn ${variant.stock_quantity}`}</span>
+                      <span>•</span>
+                      <span>Đã bán {variant.sold_count.toLocaleString('vi-VN')}</span>
+                    </span>
+                  </span>
+                </div>
+                {variant.is_featured && (
+                  <span className="absolute -top-2 left-12 rounded-full bg-rose-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white">
+                    Phổ biến
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {status !== 'qr_pending' && status !== 'success' && (
-        <div className="flex flex-col gap-2.5">
-          {/* Key trial button */}
-          {product.has_key && (
-            <Button
-              variant="outline"
-              className="w-full justify-center"
-              onClick={handleGetTrialKey}
-              isLoading={status === 'loading'}
-              icon={<Gift className="w-4 h-4" />}
-            >
-              Nhận Key Test Miễn Phí
-            </Button>
+        <div className="space-y-3 border-t border-slate-100 px-2 pt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold">Số lượng</p>
+              <p className="text-[11px] text-slate-400">Tối đa {maxQuantity} / đơn</p>
+            </div>
+            <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1">
+              <button type="button" disabled={quantity <= 1} onClick={() => setQuantity((value) => Math.max(1, value - 1))} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 transition hover:bg-white disabled:opacity-25">
+                <Minus className="h-3.5 w-3.5" />
+              </button>
+              <span className="w-10 text-center text-sm font-black">{quantity}</span>
+              <button type="button" disabled={quantity >= maxQuantity} onClick={() => setQuantity((value) => Math.min(maxQuantity, value + 1))} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 transition hover:bg-white disabled:opacity-25">
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {user && profile && (
+            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-xs">
+              <span className="flex items-center gap-2 text-slate-500"><Coins className="h-3.5 w-3.5" />Số dư ví</span>
+              <span className="font-bold">{profile.coin_balance.toLocaleString('vi-VN')}đ</span>
+            </div>
           )}
 
-          {/* Mua bằng coin */}
-          {product.price > 0 && (
-            <Button
-              variant="primary"
-              className="w-full justify-center shadow-md shadow-rose-500/20"
-              onClick={handlePurchaseCoin}
-              isLoading={status === 'loading'}
-              icon={<Coins className="w-4 h-4" />}
-            >
-              Mua Bằng Ví · {product.price.toLocaleString('vi-VN')} VND
-            </Button>
-          )}
+          {(status === 'error' && error) || (showLoginHint && !user) ? (
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-relaxed text-red-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{error || 'Đăng nhập để lưu đơn và nhận sản phẩm.'}</span>
+              <button type="button" className="ml-auto" onClick={() => { setStatus('idle'); setError(''); setShowLoginHint(false); }}><X className="h-4 w-4" /></button>
+            </div>
+          ) : null}
 
-          {/* Mua bằng QR */}
-          {product.price > 0 && (
-            <Button
-              variant="secondary"
-              className="w-full justify-center"
-              onClick={handlePurchaseQR}
-              isLoading={status === 'loading'}
-              icon={<QrCode className="w-4 h-4" />}
+          <button
+            type="button"
+            disabled={isOutOfStock || status === 'loading'}
+            onClick={() => purchase('coin')}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-rose-200 transition hover:from-rose-700 hover:to-red-600 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <WalletCards className="h-4 w-4" />
+            {status === 'loading' ? 'Đang giữ hàng...' : selected.price === 0 ? 'Nhận miễn phí' : `Mua bằng ví • ${formatPrice(total)}`}
+          </button>
+          {selected.price > 0 && (
+            <button
+              type="button"
+              disabled={isOutOfStock || status === 'loading'}
+              onClick={() => purchase('bank_qr')}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-rose-200 hover:bg-rose-50 disabled:opacity-45"
             >
-              Thanh Toán QR Bank
-            </Button>
+              <QrCode className="h-4 w-4 text-rose-600" /> Thanh toán QR tự động
+            </button>
           )}
+          <div className="grid grid-cols-2 gap-2 pt-1 text-[10px] text-slate-400">
+            <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" />Đối soát an toàn</span>
+            <span className="flex items-center justify-end gap-1.5"><Zap className="h-3.5 w-3.5" />Giao tự động</span>
+          </div>
         </div>
       )}
 
-      {/* QR Pending */}
       {status === 'qr_pending' && qrData && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-          className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
-            <span className="text-sm font-semibold text-slate-800">Quét QR để thanh toán</span>
-            <div className={cn('flex items-center gap-1.5 text-xs font-mono font-bold', countdown < 120 ? 'text-red-600' : 'text-slate-600')}>
-              <Clock className="w-3.5 h-3.5" />{formatTime(countdown)}
+        <div className="border-t border-slate-100 px-2 pt-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold">Quét QR để thanh toán</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">Hệ thống tự đối soát mỗi 4 giây</p>
+            </div>
+            <span className={cn('flex items-center gap-1.5 font-mono text-xs font-bold', countdown < 120 ? 'text-red-600' : 'text-slate-500')}>
+              <Clock3 className="h-3.5 w-3.5" />{String(Math.floor(countdown / 60)).padStart(2, '0')}:{String(countdown % 60).padStart(2, '0')}
+            </span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[150px_1fr] lg:grid-cols-1 xl:grid-cols-[150px_1fr]">
+            <div className="mx-auto rounded-2xl bg-white p-2">
+              <Image src={qrData.qr_url} alt="Mã QR thanh toán" width={150} height={150} className="rounded-xl" />
+            </div>
+            <div className="space-y-2 text-xs">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-slate-400">Nội dung chuyển khoản</p>
+                <div className="mt-1 flex items-center justify-between gap-2"><b className="font-mono text-sm">{qrData.transaction_code}</b><CopyButton value={qrData.transaction_code} /></div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-slate-400">Số tiền chính xác</p>
+                <b className="mt-1 block text-base text-rose-600">{formatPrice(qrData.amount)}</b>
+              </div>
+              <button type="button" onClick={checkPayment} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 font-semibold text-slate-600 hover:bg-slate-50">
+                <RefreshCw className={cn('h-3.5 w-3.5', checking && 'animate-spin')} /> Kiểm tra ngay
+              </button>
             </div>
           </div>
-          <div className="p-4 flex flex-col items-center gap-3">
-            <div className="p-2 bg-white border border-slate-100 rounded-xl">
-              <Image src={qrData.qr_url} alt="QR thanh toán" width={180} height={180} className="rounded-lg" />
-            </div>
-            <div className="w-full space-y-2">
-              <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs">
-                <span className="text-slate-500">Nội dung CK</span>
-                <div className="flex items-center gap-1">
-                  <span className="font-mono font-bold text-slate-800">{qrData.transaction_code}</span>
-                  <CopyButton text={qrData.transaction_code} />
-                </div>
-              </div>
-              <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs">
-                <span className="text-slate-500">Số tiền</span>
-                <span className="font-bold text-rose-600">{qrData.amount.toLocaleString('vi-VN')} VND</span>
-              </div>
-              <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs">
-                <div className={cn('w-1.5 h-1.5 rounded-full', polling ? 'bg-blue-400 animate-pulse' : 'bg-slate-300')} />
-                <span className="text-slate-500">Đang chờ xác nhận thanh toán tự động...</span>
-                <button onClick={checkQRStatus} className="ml-auto text-slate-400 hover:text-slate-700 cursor-pointer">
-                  <RefreshCw className={cn('w-3.5 h-3.5', polling && 'animate-spin')} />
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="px-4 pb-4">
-            <button onClick={() => { setStatus('idle'); setQrData(null); }} className="w-full py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer">
-              Huỷ
-            </button>
-          </div>
-        </motion.div>
+          <button type="button" className="mt-3 w-full py-2 text-xs text-slate-400 hover:text-slate-700" onClick={() => { setStatus('idle'); setQrData(null); }}>Đóng mã QR</button>
+        </div>
       )}
 
-      {/* Success */}
       {status === 'success' && successData && (
-        <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
-          className="border border-emerald-200 bg-emerald-50 rounded-2xl overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-emerald-100">
-            <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-            <p className="text-sm font-semibold text-emerald-800">Giao hàng thành công</p>
+        <div className="border-t border-slate-100 px-2 pt-4">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-600"><CheckCircle2 className="h-5 w-5" /></span>
+              <div><p className="font-bold text-emerald-800">Bàn giao thành công</p><p className="mt-1 text-xs leading-relaxed text-emerald-700/70">{successData.message || 'Đơn hàng đã được lưu vào tài khoản của bạn.'}</p></div>
+            </div>
           </div>
-          <div className="p-4 space-y-3">
-            {successData.delivery_intro && (
-              <p className="text-sm text-slate-700 leading-relaxed">{successData.delivery_intro}</p>
-            )}
-            {successData.key_value && (
-              <div className="bg-white border border-slate-200 rounded-xl p-3">
-                <p className="text-xs text-slate-400 mb-2 uppercase tracking-wider font-semibold">Key bản quyền</p>
-                <div className="flex items-center gap-2">
-                  <Key className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                  <span className="font-mono text-sm font-bold text-slate-900 flex-1 break-all">{successData.key_value}</span>
-                  <CopyButton text={successData.key_value} />
+
+          {deliveryKeys.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {deliveryKeys.map((item, index) => (
+                <div key={`${item.key}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Key {deliveryKeys.length > 1 ? index + 1 : 'bản quyền'}</p>
+                  <div className="mt-1 flex items-center gap-2"><code className="min-w-0 flex-1 break-all text-xs font-bold text-slate-900">{item.key}</code><CopyButton value={item.key!} /></div>
                 </div>
-              </div>
-            )}
-            {successData.download_url && (
-              <a href={successData.download_url} target="_blank" rel="noopener noreferrer">
-                <Button variant="primary" className="w-full justify-center" icon={<Download className="w-4 h-4" />}>
-                  Tải Xuống Sản Phẩm
-                </Button>
-              </a>
-            )}
-            {successData.delivery_note && (
-              <div className="bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
-                {successData.delivery_note}
-              </div>
-            )}
-            <p className="text-xs text-emerald-700">Email xác nhận đã được gửi về hộp thư của bạn.</p>
-          </div>
-        </motion.div>
+              ))}
+            </div>
+          )}
+
+          {successData.download_url && (
+            <a href={successData.download_url} target="_blank" rel="noopener noreferrer" className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-500 px-4 py-3 text-sm font-black text-white transition hover:from-rose-700 hover:to-red-600">
+              <Download className="h-4 w-4" /> Tải sản phẩm
+            </a>
+          )}
+          <button type="button" onClick={() => { setStatus('idle'); setSuccessData(null); }} className="mt-2 flex w-full items-center justify-center gap-2 py-2 text-xs text-slate-400 hover:text-slate-700">
+            <ShoppingBag className="h-3.5 w-3.5" /> Tiếp tục mua
+          </button>
+        </div>
       )}
-    </div>
+    </aside>
   );
 }

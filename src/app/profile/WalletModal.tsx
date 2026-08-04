@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Coins, Copy, Check, Clock, CheckCircle2, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { X, Coins, Copy, Check, Clock, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import Image from 'next/image';
 import Button from '@/components/ui/Button';
 import { cn } from '@/utils/helpers';
@@ -28,7 +28,8 @@ export default function WalletModal({ isOpen, onClose, onSuccess }: WalletModalP
   const [customAmount, setCustomAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [qrData, setQrData] = useState<{
-    qr_url: string; transaction_code: string; transaction_id: string; expires_at: string;
+    qr_url: string; transaction_code: string; transaction_id: string; expires_at: string; amount: number;
+    bank?: { bank_id: string; account_no: string; account_name: string };
   } | null>(null);
   const [countdown, setCountdown] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -54,7 +55,7 @@ export default function WalletModal({ isOpen, onClose, onSuccess }: WalletModalP
     if (!qrData || polling) return;
     setPolling(true);
     try {
-      const res = await fetch(`/api/payment/sepay-webhook?transaction_id=${qrData.transaction_id}`);
+      const res = await fetch(`/api/payment/status?transaction_id=${encodeURIComponent(qrData.transaction_id)}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         if (data.status === 'completed') {
@@ -74,8 +75,8 @@ export default function WalletModal({ isOpen, onClose, onSuccess }: WalletModalP
 
   const handleCreateQR = async () => {
     const finalAmount = customAmount ? parseInt(customAmount.replace(/\D/g, '')) : amount;
-    if (!finalAmount || finalAmount < 1000) {
-      setError('Số tiền tối thiểu 1,000 VND'); return;
+    if (!finalAmount || finalAmount < 10_000) {
+      setError('Số tiền tối thiểu 10.000 VND'); return;
     }
     setIsLoading(true); setError(null);
     try {
@@ -173,7 +174,7 @@ export default function WalletModal({ isOpen, onClose, onSuccess }: WalletModalP
                       onChange={(e) => setCustomAmount(e.target.value.replace(/\D/g, ''))}
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400 hover:border-slate-300"
                     />
-                    <p className="text-xs text-slate-400">Tối thiểu 1,000 VND</p>
+                    <p className="text-xs text-slate-400">Tối thiểu 10.000 VND</p>
                   </div>
 
                   {finalAmount > 0 && (
@@ -226,9 +227,9 @@ export default function WalletModal({ isOpen, onClose, onSuccess }: WalletModalP
                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
                       <div>
                         <p className="text-xs text-slate-500">Ngân hàng</p>
-                        <p className="text-sm font-semibold text-slate-900">BIDV · Trần Minh Phương</p>
+                        <p className="text-sm font-semibold text-slate-900">{qrData.bank?.bank_id || 'Ngân hàng'} · {qrData.bank?.account_name || 'PhuongDev'}</p>
                       </div>
-                      <p className="text-sm font-mono font-bold text-slate-900">8811430066</p>
+                      <p className="text-sm font-mono font-bold text-slate-900">{qrData.bank?.account_no || '—'}</p>
                     </div>
 
                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
@@ -245,7 +246,7 @@ export default function WalletModal({ isOpen, onClose, onSuccess }: WalletModalP
                       <div>
                         <p className="text-xs text-slate-500">Số tiền</p>
                       </div>
-                      <p className="text-sm font-bold text-rose-600">{finalAmount.toLocaleString('vi-VN')} VND</p>
+                      <p className="text-sm font-bold text-rose-600">{qrData.amount.toLocaleString('vi-VN')} VND</p>
                     </div>
                   </div>
 

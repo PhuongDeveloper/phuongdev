@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import NavbarClient from './NavbarClient';
 
-export default async function Navbar() {
+export default async function Navbar({ theme = 'light' }: { theme?: 'light' | 'dark' }) {
   const supabase = await createClient();
 
   const { data: configRows } = await supabase
@@ -13,5 +13,5 @@ export default async function Navbar() {
     siteConfig[row.key] = row.value;
   });
 
-  return <NavbarClient siteConfig={siteConfig} />;
+  return <NavbarClient siteConfig={siteConfig} theme={theme} />;
 }

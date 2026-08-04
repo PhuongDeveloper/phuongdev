@@ -29,9 +29,10 @@ const navLinks = [
 
 interface NavbarClientProps {
   siteConfig: Record<string, string>;
+  theme?: 'light' | 'dark';
 }
 
-export default function NavbarClient({ siteConfig }: NavbarClientProps) {
+export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClientProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
@@ -92,7 +93,9 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
         transition={{ duration: 0.5, ease: 'easeOut' }}
         className={cn(
           'fixed top-0 left-0 right-0 z-40 transition-colors duration-300',
-          isScrolled ? 'bg-white/80 backdrop-blur-xl border-b border-slate-200/50 shadow-sm' : 'bg-transparent'
+          theme === 'dark'
+            ? 'border-b border-white/10 bg-[#0b0e13]/90 shadow-lg shadow-black/10 backdrop-blur-xl'
+            : isScrolled ? 'bg-white/80 backdrop-blur-xl border-b border-slate-200/50 shadow-sm' : 'bg-transparent'
         )}
       >
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -109,7 +112,7 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
                     className="p-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-500 shadow-lg shadow-rose-500/30">
                     <Code2 className="w-5 h-5 text-white" />
                   </motion.div>
-                  <span className="text-lg font-bold text-slate-900 group-hover:text-rose-600 transition-colors">
+                  <span className={cn('text-lg font-bold transition-colors group-hover:text-rose-500', theme === 'dark' ? 'text-white' : 'text-slate-900')}>
                     Phuong<span className="gradient-text">Dev</span>
                   </span>
                 </>
@@ -123,11 +126,11 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
                 const Icon = link.icon;
                 return (
                   <motion.div key={link.href} initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + index * 0.1 }}>
-                    <Link href={link.href} className={cn('relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 group overflow-hidden', isActive ? 'text-rose-600' : 'text-slate-600 hover:text-slate-900')}>
-                      {isActive && <motion.div layoutId="navbar-active-bg" className="absolute inset-0 bg-rose-50 rounded-xl -z-10" transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }} />}
+                    <Link href={link.href} className={cn('relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 group overflow-hidden', isActive ? 'text-rose-500' : theme === 'dark' ? 'text-white/65 hover:text-white' : 'text-slate-600 hover:text-slate-900')}>
+                      {isActive && <motion.div layoutId="navbar-active-bg" className={cn('absolute inset-0 rounded-xl -z-10', theme === 'dark' ? 'bg-white/[0.07]' : 'bg-rose-50')} transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }} />}
                       <Icon className={cn('w-4 h-4 transition-transform group-hover:scale-110', isActive && 'scale-110')} />
                       <span className="relative z-10">{link.label}</span>
-                      {!isActive && <div className="absolute inset-0 bg-slate-50 opacity-0 group-hover:opacity-100 rounded-xl -z-10 transition-opacity" />}
+                      {!isActive && <div className={cn('absolute inset-0 opacity-0 group-hover:opacity-100 rounded-xl -z-10 transition-opacity', theme === 'dark' ? 'bg-white/[0.05]' : 'bg-slate-50')} />}
                     </Link>
                   </motion.div>
                 );
@@ -139,7 +142,7 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
               {user ? (
                 <div ref={dropdownRef} className="relative">
                   <button onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer">
+                    className={cn('flex items-center gap-2 px-3 py-2 rounded-xl transition-colors cursor-pointer', theme === 'dark' ? 'hover:bg-white/[0.06]' : 'hover:bg-slate-100')}>
                     {/* Avatar */}
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-rose-500 to-red-400 flex items-center justify-center text-white text-xs font-bold overflow-hidden flex-shrink-0">
                       {profile?.avatar_url
@@ -147,8 +150,8 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
                         : (profile?.display_name || user.email || 'U')[0].toUpperCase()
                       }
                     </div>
-                    <div className="hidden lg:block text-left">
-                      <div className="text-xs font-semibold text-slate-800 max-w-[100px] truncate">
+                      <div className="hidden lg:block text-left">
+                      <div className={cn('text-xs font-semibold max-w-[100px] truncate', theme === 'dark' ? 'text-white' : 'text-slate-800')}>
                         {profile?.display_name || user.email?.split('@')[0]}
                       </div>
                       <div className="flex items-center gap-1 text-xs text-rose-600 font-medium">
@@ -203,7 +206,7 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
                   <button
                     onClick={() => setAuthModal({ open: true, tab: 'login' })}
                     id="navbar-login-btn"
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all cursor-pointer"
+                    className={cn('flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer', theme === 'dark' ? 'text-white/70 hover:bg-white/[0.06] hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900')}
                   >
                     <LogIn className="w-4 h-4" /> Đăng Nhập
                   </button>
@@ -220,7 +223,7 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
 
             {/* Mobile menu button */}
             <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              className={cn('md:hidden p-2 rounded-xl transition-colors cursor-pointer', theme === 'dark' ? 'text-white/70 hover:bg-white/10' : 'text-slate-600 hover:bg-slate-100')}
               aria-label="Mở menu">
               {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -230,19 +233,19 @@ export default function NavbarClient({ siteConfig }: NavbarClientProps) {
           <AnimatePresence>
             {isMobileMenuOpen && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="md:hidden overflow-hidden">
-                <div className="pb-4 border-t border-slate-100 mt-2 pt-4 flex flex-col gap-1">
+                <div className={cn('pb-4 mt-2 pt-4 flex flex-col gap-1 border-t', theme === 'dark' ? 'border-white/10' : 'border-slate-100')}>
                   {navLinks.map((link, index) => {
                     const isActive = pathname === link.href;
                     const Icon = link.icon;
                     return (
                       <motion.div key={link.href} initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: index * 0.05 }}>
-                        <Link href={link.href} className={cn('flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all', isActive ? 'bg-rose-50 text-rose-600' : 'text-slate-600 hover:bg-slate-50')}>
+                        <Link href={link.href} className={cn('flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all', isActive ? theme === 'dark' ? 'bg-white/[0.07] text-rose-400' : 'bg-rose-50 text-rose-600' : theme === 'dark' ? 'text-white/65 hover:bg-white/[0.05]' : 'text-slate-600 hover:bg-slate-50')}>
                           <Icon className="w-4 h-4" />{link.label}
                         </Link>
                       </motion.div>
                     );
                   })}
-                  <div className="h-px bg-slate-100 mx-4 my-2" />
+                  <div className={cn('h-px mx-4 my-2', theme === 'dark' ? 'bg-white/10' : 'bg-slate-100')} />
                   {user ? (
                     <>
                       <div className="flex items-center gap-2 px-4 py-2">

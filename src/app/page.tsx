@@ -42,7 +42,7 @@ export default async function HomePage() {
   // Lấy danh sách sản phẩm nổi bật (limit 3)
   const { data: products } = await supabase
     .from('products')
-    .select('*')
+    .select('id,title,slug,description,price,demo_url,image_url,category,is_active,badge,total_sold,is_featured,sort_order,views,created_at,updated_at')
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .limit(3);

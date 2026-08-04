@@ -1,233 +1,98 @@
-/* ==========================================================================
-   Admin Dashboard - Trang tổng quan doanh thu + thống kê
-   ========================================================================== */
-
-import { createClient } from '@/lib/supabase/server';
-import { createClient as supabaseAdminCreate } from '@supabase/supabase-js';
 import Link from 'next/link';
 import {
-  ShoppingBag, Users, TrendingUp, DollarSign, Package,
-  ArrowUpRight, Briefcase, FolderKanban,
+  ArrowUpRight,
+  Boxes,
+  CircleDollarSign,
+  Clock3,
+  PackageX,
+  ShoppingCart,
+  TrendingUp,
+  Users,
 } from 'lucide-react';
 
-// Sử dụng service role để đọc dữ liệu admin
-function getAdminClient() {
-  return supabaseAdminCreate(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
+import { createAdminClient } from '@/lib/supabase/admin';
 
-function formatCurrencyVN(amount: number) {
-  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000) return `${(amount / 1_000).toFixed(0)}K`;
-  return amount.toLocaleString('vi-VN');
+function money(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}tr`;
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
+  return value.toLocaleString('vi-VN');
 }
 
 export default async function AdminDashboard() {
-  const supabase = await createClient();
-  const admin = getAdminClient();
+  const admin = createAdminClient();
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startWeek = new Date(startToday);
+  startWeek.setDate(startWeek.getDate() - 6);
 
-  const today = new Date();
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-
-  const [
-    { count: projectsCount },
-    { count: servicesCount },
-    { count: productsCount },
-    { count: usersCount },
-    revenueToday,
-    revenueMonth,
-    recentOrders,
-    recentTransactions,
-  ] = await Promise.all([
-    supabase.from('projects').select('*', { count: 'exact', head: true }),
-    supabase.from('services').select('*', { count: 'exact', head: true }),
-    supabase.from('products').select('*', { count: 'exact', head: true }),
+  const [users, products, ordersMonth, weekOrders, pendingTransactions, lowStock, recentOrders] = await Promise.all([
     admin.from('user_profiles').select('*', { count: 'exact', head: true }),
-    admin.from('orders').select('amount').eq('status', 'completed').gte('created_at', startOfToday),
-    admin.from('orders').select('amount').eq('status', 'completed').gte('created_at', startOfMonth),
-    admin.from('orders').select('*').order('created_at', { ascending: false }).limit(8),
-    admin.from('transactions').select('*').eq('status', 'completed').order('created_at', { ascending: false }).limit(8),
+    admin.from('products').select('*', { count: 'exact', head: true }).eq('is_active', true),
+    admin.from('orders').select('amount, created_at').eq('status', 'completed').gte('created_at', startMonth.toISOString()),
+    admin.from('orders').select('amount, created_at').eq('status', 'completed').gte('created_at', startWeek.toISOString()),
+    admin.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+    admin.from('product_variants').select('id, name, sku, stock_quantity, product_id, products(title, slug)').eq('is_active', true).eq('inventory_policy', 'finite').lte('stock_quantity', 5).order('stock_quantity'),
+    admin.from('orders').select('id, product_title, variant_name, quantity, amount, payment_method, status, created_at').order('created_at', { ascending: false }).limit(8),
   ]);
 
-  const todayRevenue = (revenueToday.data || []).reduce((s, o) => s + (o.amount || 0), 0);
-  const monthRevenue = (revenueMonth.data || []).reduce((s, o) => s + (o.amount || 0), 0);
+  const monthRevenue = (ordersMonth.data || []).reduce((sum, order) => sum + Number(order.amount || 0), 0);
+  const todayRevenue = (ordersMonth.data || []).filter((order) => new Date(order.created_at) >= startToday).reduce((sum, order) => sum + Number(order.amount || 0), 0);
+  const week = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(startWeek);
+    date.setDate(startWeek.getDate() + index);
+    const key = date.toISOString().slice(0, 10);
+    const value = (weekOrders.data || []).filter((order) => new Date(order.created_at).toISOString().slice(0, 10) === key).reduce((sum, order) => sum + Number(order.amount || 0), 0);
+    return { key, label: date.toLocaleDateString('vi-VN', { weekday: 'short' }), value };
+  });
+  const maxDay = Math.max(...week.map((day) => day.value), 1);
 
-  const paymentLabel: Record<string, string> = {
-    coin: 'Ví', bank_qr: 'QR Bank', free_trial: 'Miễn phí',
-  };
+  const stats = [
+    { label: 'Doanh thu hôm nay', value: `${money(todayRevenue)}đ`, note: 'Đơn đã hoàn thành', icon: CircleDollarSign, tone: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Doanh thu tháng', value: `${money(monthRevenue)}đ`, note: `${ordersMonth.data?.length || 0} đơn thành công`, icon: TrendingUp, tone: 'bg-blue-50 text-blue-600' },
+    { label: 'Sản phẩm đang bán', value: products.count || 0, note: `${lowStock.data?.length || 0} gói sắp hết`, icon: Boxes, tone: 'bg-red-50 text-[#ed4c50]' },
+    { label: 'Khách hàng', value: users.count || 0, note: `${pendingTransactions.count || 0} giao dịch chờ`, icon: Users, tone: 'bg-violet-50 text-violet-600' },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Page header */}
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">Tổng Quan</h2>
-        <p className="text-slate-500 mt-1">Dữ liệu kinh doanh và quản trị hệ thống.</p>
+    <div className="space-y-7">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div><p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#ed4c50]">Live commerce overview</p><h2 className="mt-1 text-3xl font-black tracking-[-0.04em]">Nhịp vận hành hôm nay</h2><p className="mt-2 text-sm text-slate-500">Doanh thu, đơn và cảnh báo kho tại một nơi.</p></div>
+        <Link href="/admin/products" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800">Quản lý kho <ArrowUpRight className="h-4 w-4" /></Link>
       </div>
 
-      {/* Revenue cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          {
-            title: 'Doanh thu hôm nay',
-            value: `${formatCurrencyVN(todayRevenue)} VND`,
-            icon: DollarSign,
-            color: 'text-emerald-600',
-            bg: 'bg-emerald-50',
-            border: 'border-emerald-100',
-          },
-          {
-            title: 'Doanh thu tháng này',
-            value: `${formatCurrencyVN(monthRevenue)} VND`,
-            icon: TrendingUp,
-            color: 'text-blue-600',
-            bg: 'bg-blue-50',
-            border: 'border-blue-100',
-          },
-          {
-            title: 'Người Dùng',
-            value: usersCount || 0,
-            icon: Users,
-            color: 'text-violet-600',
-            bg: 'bg-violet-50',
-            border: 'border-violet-100',
-            href: '/admin/users',
-          },
-          {
-            title: 'Sản Phẩm',
-            value: productsCount || 0,
-            icon: ShoppingBag,
-            color: 'text-rose-600',
-            bg: 'bg-rose-50',
-            border: 'border-rose-100',
-            href: '/admin/products',
-          },
-        ].map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div key={stat.title} className={`bg-white border ${stat.border} rounded-2xl p-5 shadow-sm`}>
-              <div className="flex items-start justify-between mb-3">
-                <div className={`p-2.5 rounded-xl ${stat.bg}`}>
-                  <Icon className={`w-5 h-5 ${stat.color}`} />
-                </div>
-                {stat.href && (
-                  <Link href={stat.href} className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
-                    <ArrowUpRight className="w-4 h-4" />
-                  </Link>
-                )}
-              </div>
-              <div className="text-2xl font-bold text-slate-900">{stat.value}</div>
-              <div className="text-sm text-slate-500 mt-0.5">{stat.title}</div>
-            </div>
-          );
-        })}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map((stat) => { const Icon = stat.icon; return <div key={stat.label} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"><div className="flex items-start justify-between"><span className={`grid h-11 w-11 place-items-center rounded-xl ${stat.tone}`}><Icon className="h-5 w-5" /></span><ArrowUpRight className="h-4 w-4 text-slate-300" /></div><p className="mt-5 text-2xl font-black tracking-tight">{stat.value}</p><p className="mt-1 text-xs font-bold text-slate-600">{stat.label}</p><p className="mt-1 text-[11px] text-slate-400">{stat.note}</p></div>; })}
       </div>
 
-      {/* Content stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { title: 'Dự Án', value: projectsCount || 0, icon: FolderKanban, href: '/admin/projects', color: 'text-blue-600', bg: 'bg-blue-50' },
-          { title: 'Dịch Vụ', value: servicesCount || 0, icon: Briefcase, href: '/admin/services', color: 'text-indigo-600', bg: 'bg-indigo-50' },
-          { title: 'Sản Phẩm', value: productsCount || 0, icon: Package, href: '/admin/products', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        ].map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Link key={stat.title} href={stat.href}
-              className="flex items-center gap-4 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:border-slate-300 hover:shadow-md transition-all group">
-              <div className={`p-3 rounded-xl ${stat.bg} flex-shrink-0`}>
-                <Icon className={`w-6 h-6 ${stat.color}`} />
-              </div>
-              <div>
-                <div className="text-xs font-medium text-slate-500">{stat.title}</div>
-                <div className="text-2xl font-bold text-slate-900">{stat.value}</div>
-              </div>
-              <ArrowUpRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 ml-auto transition-colors" />
-            </Link>
-          );
-        })}
-      </div>
-
-      {/* Recent orders + transactions */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-        {/* Đơn hàng gần đây */}
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-900">Đơn Hàng Gần Đây</h3>
-            <Link href="/admin/orders" className="text-xs text-rose-600 hover:underline font-medium">Xem tất cả</Link>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,.55fr)]">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between"><div><p className="text-sm font-black">Doanh thu 7 ngày</p><p className="mt-1 text-xs text-slate-400">Chỉ tính đơn đã hoàn thành</p></div><span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Realtime</span></div>
+          <div className="mt-8 grid h-52 grid-cols-7 items-end gap-2 sm:gap-4">
+            {week.map((day) => <div key={day.key} className="flex h-full flex-col justify-end text-center"><p className="mb-2 hidden text-[10px] font-bold text-slate-400 sm:block">{day.value ? money(day.value) : '—'}</p><div className="group relative mx-auto w-full max-w-14 overflow-hidden rounded-t-xl bg-slate-100" style={{ height: `${Math.max(day.value ? (day.value / maxDay) * 100 : 5, 5)}%` }}><div className="absolute inset-0 bg-gradient-to-t from-[#ed4c50] to-[#ff7679] transition group-hover:brightness-110" /></div><p className="mt-2 text-[10px] font-bold uppercase text-slate-400">{day.label}</p></div>)}
           </div>
-          <div className="divide-y divide-slate-50">
-            {(recentOrders.data || []).length === 0 ? (
-              <p className="px-5 py-8 text-sm text-slate-400 text-center">Chưa có đơn hàng nào.</p>
-            ) : (
-              (recentOrders.data || []).map((order: Record<string, unknown>) => (
-                <div key={order.id as string} className="flex items-center justify-between px-5 py-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">{order.product_title as string}</p>
-                    <p className="text-xs text-slate-400">{paymentLabel[order.payment_method as string] || order.payment_method as string} · {new Date(order.created_at as string).toLocaleDateString('vi-VN')}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0 ml-3">
-                    <p className="text-sm font-semibold text-slate-900">{(order.amount as number) > 0 ? `${(order.amount as number).toLocaleString('vi-VN')}` : 'Miễn phí'}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      order.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
-                      order.status === 'pending' ? 'bg-amber-50 text-amber-700' :
-                      'bg-red-50 text-red-700'
-                    }`}>
-                      {order.status === 'completed' ? 'Hoàn thành' : order.status === 'pending' ? 'Đang xử lý' : 'Thất bại'}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
+        </section>
+
+        <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 p-5"><div><p className="text-sm font-black">Cảnh báo kho</p><p className="mt-1 text-xs text-slate-400">Gói còn tối đa 5 sản phẩm</p></div><PackageX className="h-5 w-5 text-amber-500" /></div>
+          <div className="divide-y divide-slate-100">
+            {(lowStock.data || []).slice(0, 6).map((variant) => {
+              const productRelation = Array.isArray(variant.products) ? variant.products[0] : variant.products;
+              return <Link key={variant.id} href="/admin/products" className="flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50"><span className={`grid h-9 w-9 place-items-center rounded-xl text-xs font-black ${variant.stock_quantity === 0 ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>{variant.stock_quantity}</span><span className="min-w-0 flex-1"><b className="block truncate text-xs">{productRelation?.title || 'Sản phẩm'}</b><span className="block truncate text-[10px] text-slate-400">{variant.name} · {variant.sku}</span></span><ArrowUpRight className="h-3.5 w-3.5 text-slate-300" /></Link>;
+            })}
+            {!lowStock.data?.length && <div className="p-10 text-center"><Boxes className="mx-auto h-7 w-7 text-emerald-400" /><p className="mt-2 text-xs font-bold text-slate-600">Kho đang ổn định</p></div>}
           </div>
+        </section>
+      </div>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 p-5"><div><p className="text-sm font-black">Đơn hàng mới nhất</p><p className="mt-1 text-xs text-slate-400">Dòng hoạt động gần đây của cửa hàng</p></div><Link href="/admin/orders" className="text-xs font-black text-[#ed4c50] hover:underline">Xem tất cả</Link></div>
+        <div className="divide-y divide-slate-100">
+          {(recentOrders.data || []).map((order) => <div key={order.id} className="grid gap-2 px-5 py-3.5 sm:grid-cols-[minmax(0,1fr)_130px_120px_100px] sm:items-center"><div className="min-w-0"><p className="truncate text-xs font-black">{order.product_title}</p><p className="mt-1 truncate text-[10px] text-slate-400">{order.variant_name || 'Gói tiêu chuẩn'} · SL {order.quantity}</p></div><p className="text-xs font-bold">{Number(order.amount).toLocaleString('vi-VN')}đ</p><p className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400"><Clock3 className="h-3 w-3" />{new Date(order.created_at).toLocaleString('vi-VN')}</p><span className={`w-fit rounded-full px-2 py-1 text-[9px] font-black uppercase ${order.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : order.status === 'pending' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'}`}>{order.status === 'completed' ? 'Hoàn thành' : order.status === 'pending' ? 'Chờ xử lý' : 'Thất bại'}</span></div>)}
+          {!recentOrders.data?.length && <div className="p-12 text-center text-sm text-slate-400"><ShoppingCart className="mx-auto mb-2 h-7 w-7" />Chưa có đơn hàng.</div>}
         </div>
-
-        {/* Nạp tiền gần đây */}
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-900">Nạp Tiền Gần Đây</h3>
-          </div>
-          <div className="divide-y divide-slate-50">
-            {(recentTransactions.data || []).length === 0 ? (
-              <p className="px-5 py-8 text-sm text-slate-400 text-center">Chưa có giao dịch nào.</p>
-            ) : (
-              (recentTransactions.data || []).map((tx: Record<string, unknown>) => (
-                <div key={tx.id as string} className="flex items-center justify-between px-5 py-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-mono font-medium text-slate-800">{tx.transaction_code as string}</p>
-                    <p className="text-xs text-slate-400">{new Date(tx.created_at as string).toLocaleDateString('vi-VN')}</p>
-                  </div>
-                  <p className="text-sm font-bold text-emerald-600 flex-shrink-0 ml-3">+{(tx.amount as number).toLocaleString('vi-VN')}</p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Quick links */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-900 mb-4">Quản Trị Nhanh</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {[
-            { href: '/admin/site-config', label: 'Cấu hình Website', desc: 'Tiêu đề, mô tả, mạng xã hội' },
-            { href: '/admin/products', label: 'Quản lý Sản Phẩm', desc: 'Thêm, sửa, xoá sản phẩm, key' },
-            { href: '/admin/orders', label: 'Quản lý Đơn Hàng', desc: 'Xem và xử lý đơn hàng' },
-            { href: '/admin/users', label: 'Quản lý Người Dùng', desc: 'Xem hồ sơ, điều chỉnh coin' },
-            { href: '/admin/blogs', label: 'Quản lý Blog', desc: 'Bài viết công nghệ' },
-            { href: '/admin/projects', label: 'Quản lý Dự Án', desc: 'Portfolio dự án' },
-          ].map((item) => (
-            <Link key={item.href} href={item.href}
-              className="block p-3.5 rounded-xl border border-slate-100 hover:border-rose-200 hover:bg-rose-50/50 transition-all group">
-              <div className="font-medium text-slate-900 group-hover:text-rose-700 text-sm">{item.label}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{item.desc}</div>
-            </Link>
-          ))}
-        </div>
-      </div>
+      </section>
     </div>
   );
 }
+

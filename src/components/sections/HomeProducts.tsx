@@ -13,7 +13,7 @@ import { type Product } from '@/lib/types/database';
 import { formatCurrency } from '@/utils/helpers';
 
 interface HomeProductsProps {
-  products: Product[];
+  products: Array<Pick<Product, 'id' | 'title' | 'slug' | 'description' | 'price' | 'image_url' | 'category' | 'views'>>;
 }
 
 const containerVariants: Variants = {

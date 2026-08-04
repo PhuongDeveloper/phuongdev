@@ -1,31 +1,27 @@
-/* ==========================================================================
-   Trang Quản Trị Sản Phẩm (/admin/products) - Server Component
-   ========================================================================== */
-
-import { createClient } from '@/lib/supabase/server';
 import ProductsClient from './ProductsClient';
+import { createAdminClient } from '@/lib/supabase/admin';
+import type { ProductWithVariants } from '@/lib/types/database';
 
 export default async function ProductsPage() {
-  const supabase = await createClient();
+  const admin = createAdminClient();
+  const [{ data: products }, { data: categories }, { data: keys }] = await Promise.all([
+    admin.from('products').select('*, product_variants(*)').order('sort_order', { ascending: true }),
+    admin.from('categories').select('*').order('sort_order', { ascending: true }),
+    admin.from('product_keys').select('variant_id, is_used, reserved_order_id'),
+  ]);
 
-  const { data: products } = await supabase
-    .from('products')
-    .select('*')
-    .order('sort_order', { ascending: true });
+  const keyCount = new Map<string, number>();
+  (keys || []).forEach((key) => {
+    if (key.variant_id && !key.is_used && !key.reserved_order_id) keyCount.set(key.variant_id, (keyCount.get(key.variant_id) || 0) + 1);
+  });
+  const enriched = (products || []).map((product) => ({
+    ...product,
+    product_variants: (product.product_variants || []).map((variant: Record<string, unknown>) => ({
+      ...variant,
+      available_keys: keyCount.get(variant.id as string) || 0,
+    })),
+  }));
 
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('*')
-    .order('sort_order', { ascending: true });
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">Quản Lý Sản Phẩm</h2>
-        <p className="text-slate-500">Thêm mã nguồn, script hoặc template để hiển thị trong cửa hàng.</p>
-      </div>
-
-      <ProductsClient initialData={products || []} categories={categories || []} />
-    </div>
-  );
+  return <ProductsClient initialData={enriched as ProductWithVariants[]} categories={categories || []} />;
 }
+
