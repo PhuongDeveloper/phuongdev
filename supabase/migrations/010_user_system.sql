@@ -82,6 +82,7 @@ CREATE INDEX IF NOT EXISTS orders_user_idx ON orders(user_id);
 CREATE INDEX IF NOT EXISTS product_keys_product_idx ON product_keys(product_id);
 
 -- ===== TRIGGERS =====
+DROP TRIGGER IF EXISTS trigger_user_profiles_updated_at ON user_profiles;
 CREATE TRIGGER trigger_user_profiles_updated_at
   BEFORE UPDATE ON user_profiles
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -159,30 +160,38 @@ ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE product_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 
--- user_profiles: user chỉ đọc/sửa profile của chính mình, admin đọc tất
+DROP POLICY IF EXISTS "user_profiles_select_own" ON user_profiles;
+DROP POLICY IF EXISTS "user_profiles_update_own" ON user_profiles;
+DROP POLICY IF EXISTS "transactions_select_own" ON transactions;
+DROP POLICY IF EXISTS "transactions_insert_own" ON transactions;
+DROP POLICY IF EXISTS "orders_select_own" ON orders;
+DROP POLICY IF EXISTS "orders_insert_own" ON orders;
+DROP POLICY IF EXISTS "product_keys_admin_only" ON product_keys;
+
+-- user_profiles: user chỉ đọc/sửa profile của chính mình
 CREATE POLICY "user_profiles_select_own" ON user_profiles
-  FOR SELECT USING (auth.uid() = id OR (SELECT is_admin FROM user_profiles WHERE id = auth.uid()));
+  FOR SELECT USING (auth.uid() = id);
 
 CREATE POLICY "user_profiles_update_own" ON user_profiles
   FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
 -- transactions: user chỉ xem của mình
 CREATE POLICY "transactions_select_own" ON transactions
-  FOR SELECT USING (user_id = auth.uid() OR (SELECT is_admin FROM user_profiles WHERE id = auth.uid()));
+  FOR SELECT USING (user_id = auth.uid());
 
 CREATE POLICY "transactions_insert_own" ON transactions
   FOR INSERT WITH CHECK (user_id = auth.uid());
 
 -- orders: user chỉ xem của mình
 CREATE POLICY "orders_select_own" ON orders
-  FOR SELECT USING (user_id = auth.uid() OR (SELECT is_admin FROM user_profiles WHERE id = auth.uid()));
+  FOR SELECT USING (user_id = auth.uid());
 
 CREATE POLICY "orders_insert_own" ON orders
   FOR INSERT WITH CHECK (user_id = auth.uid());
 
--- product_keys: không cho user đọc trực tiếp (chỉ qua API)
+-- product_keys: admin/service_role bypasses RLS
 CREATE POLICY "product_keys_admin_only" ON product_keys
-  FOR ALL USING ((SELECT is_admin FROM user_profiles WHERE id = auth.uid()));
+  FOR ALL USING (false); -- block all normal users, rely on service_role
 
 -- Cho phép service role (webhook) cập nhật tất cả
 -- (service_role bypass RLS mặc định)
