@@ -134,7 +134,7 @@ export default function ProfilePageClient() {
                     <div className="text-slate-400 text-xs">VND</div>
                   </div>
                   <Button
-                    variant="solid"
+                    variant="primary"
                     size="sm"
                     onClick={() => setWalletOpen(true)}
                     className="bg-rose-600 text-white hover:bg-rose-700 border-none shadow-sm h-full py-2.5"
