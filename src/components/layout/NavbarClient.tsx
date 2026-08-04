@@ -43,13 +43,13 @@ export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClie
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const supabase = createClient();
+  // Giữ 1 instance duy nhất, tránh tạo lại mỗi render
+  const supabaseRef = useRef(createClient());
 
   // Tự mở AuthModal khi middleware redirect về /?auth=login
   useEffect(() => {
     if (searchParams.get('auth') === 'login') {
       setAuthModal({ open: true, tab: 'login' });
-      // Xoá param khỏi URL mà không reload trang
       const url = new URL(window.location.href);
       url.searchParams.delete('auth');
       window.history.replaceState({}, '', url.toString());
@@ -57,6 +57,22 @@ export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClie
   }, [searchParams]);
 
   useEffect(() => {
+    const supabase = supabaseRef.current;
+
+    // Kiểm tra session ngay khi mount — tránh mất trạng thái khi reload / chuyển tab
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+          .then(({ data }) => setProfile(data));
+      }
+    });
+
+    // Lắng nghe thay đổi auth (login, logout, token refresh, tab focus...)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -68,6 +84,7 @@ export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClie
     });
     return () => subscription.unsubscribe();
   }, []);
+
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -89,7 +106,7 @@ export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClie
   }, [pathname]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await supabaseRef.current.auth.signOut();
     setDropdownOpen(false);
     router.push('/');
     router.refresh();
@@ -104,10 +121,12 @@ export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClie
         animate={{ y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
         className={cn(
-          'fixed top-0 left-0 right-0 z-40 transition-colors duration-300',
+          'fixed top-0 left-0 right-0 z-40 transition-all duration-300',
           theme === 'dark'
             ? 'border-b border-white/10 bg-[#0b0e13]/90 shadow-lg shadow-black/10 backdrop-blur-xl'
-            : isScrolled ? 'bg-white/80 backdrop-blur-xl border-b border-slate-200/50 shadow-sm' : 'bg-transparent'
+            : isScrolled
+              ? 'bg-white/90 backdrop-blur-xl border-b border-slate-200/50 shadow-sm'
+              : 'bg-white/95 backdrop-blur-md'
         )}
       >
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

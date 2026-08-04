@@ -159,9 +159,16 @@ export default function ProductsClient({ initialData, categories }: ProductsClie
   };
 
   const archive = async (product: AdminProduct) => {
-    if (!window.confirm(`Dừng bán “${product.title}”? Lịch sử đơn hàng vẫn được giữ lại.`)) return;
+    const action = product.is_active ? 'dừng bán' : 'mở bán lại';
+    if (!window.confirm(`${action === 'dừng bán' ? 'Dừng bán' : 'Mở bán lại'} "${product.title}"?`)) return;
     const response = await fetch('/api/admin/products', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: product.id }) });
-    if (response.ok) setProducts((current) => current.map((item) => item.id === product.id ? { ...item, is_active: false } : item));
+    if (response.ok) setProducts((current) => current.map((item) => item.id === product.id ? { ...item, is_active: !item.is_active } : item));
+  };
+
+  const deleteProduct = async (product: AdminProduct) => {
+    if (!window.confirm(`Xóa vĩnh viễn "${product.title}"?\n\nThành tác này không thể hoàn tác!`)) return;
+    const response = await fetch('/api/admin/products', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: product.id, permanent: true }) });
+    if (response.ok) setProducts((current) => current.filter((item) => item.id !== product.id));
   };
 
   return (
@@ -196,7 +203,19 @@ export default function ProductsClient({ initialData, categories }: ProductsClie
                 <div className="min-w-0"><div className="flex items-center gap-2"><h3 className="truncate text-sm font-black">{product.title}</h3>{product.is_featured && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700">Nổi bật</span>}</div><p className="mt-1 truncate text-xs text-slate-400">/{product.slug} · {product.category}</p><div className="mt-2 flex gap-1.5">{activeVariants.slice(0, 3).map((variant) => <span key={variant.id} className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">{variant.name}</span>)}{activeVariants.length > 3 && <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">+{activeVariants.length - 3}</span>}</div></div>
                 <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{activeVariants.length} gói · giá từ</p><p className="mt-1 text-sm font-black text-[#ed4c50]">{formatPrice(prices.length ? Math.min(...prices) : product.price)}</p></div>
                 <div><p className={cn('flex items-center gap-1.5 text-xs font-bold', available ? 'text-emerald-600' : 'text-red-500')}><span className={cn('h-1.5 w-1.5 rounded-full', available ? 'bg-emerald-500' : 'bg-red-500')} />{available ? 'Còn hàng' : 'Hết hàng'}</p><p className="mt-1 text-[11px] text-slate-400">Kho: {stock} · Đã bán: {product.total_sold || 0}</p></div>
-                <div className="flex items-center justify-end gap-1"><button type="button" onClick={() => openEdit(product)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600" title="Chỉnh sửa"><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => archive(product)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600" title="Dừng bán"><EyeOff className="h-4 w-4" /></button></div>
+                <div className="flex items-center justify-end gap-1">
+                  <button type="button" onClick={() => openEdit(product)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600" title="Chỉnh sửa">
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button type="button" onClick={() => archive(product)}
+                    className={cn('grid h-9 w-9 place-items-center rounded-xl border transition', product.is_active ? 'border-slate-200 text-slate-400 hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600' : 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100')}
+                    title={product.is_active ? 'Dừng bán' : 'Mở bán lại'}>
+                    {product.is_active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                  <button type="button" onClick={() => deleteProduct(product)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-400 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600" title="Xóa vĩnh viễn">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             );
           })}

@@ -159,11 +159,26 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const context = await requireAdmin();
   if (!context) return NextResponse.json({ error: 'Không có quyền quản trị.' }, { status: 403 });
-  const { id } = (await request.json()) as { id?: string };
+  const { id, permanent } = (await request.json()) as { id?: string; permanent?: boolean };
   if (!id) return NextResponse.json({ error: 'Thiếu mã sản phẩm.' }, { status: 400 });
 
-  const { error } = await context.admin.from('products').update({ is_active: false }).eq('id', id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  await context.admin.from('product_variants').update({ is_active: false }).eq('product_id', id);
+  const { admin } = context;
+
+  if (permanent) {
+    // Xóa vĩnh viễn: xóa key → variant → product (theo thứ tự FK)
+    await admin.from('product_keys').delete().eq('product_id', id);
+    await admin.from('product_variants').delete().eq('product_id', id);
+    const { error } = await admin.from('products').delete().eq('id', id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  } else {
+    // Ẩn / hiện (toggle is_active)
+    const { data: current } = await admin.from('products').select('is_active').eq('id', id).single();
+    const nextActive = !(current?.is_active ?? true);
+    const { error } = await admin.from('products').update({ is_active: nextActive }).eq('id', id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    await admin.from('product_variants').update({ is_active: nextActive }).eq('product_id', id);
+  }
+
   return NextResponse.json({ success: true });
 }
+
