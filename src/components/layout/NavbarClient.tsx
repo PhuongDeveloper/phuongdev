@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import {
   Menu, X, Code2, Home, Briefcase, ShoppingBag, User,
-  Users, LogIn, LogOut, Wallet, History, ChevronDown, Coins,
+  Users, LogIn, LogOut, Wallet, History, ChevronDown, Coins, LayoutDashboard,
 } from 'lucide-react';
 import { cn } from '@/utils/helpers';
 import { createClient } from '@/lib/supabase/client';
@@ -183,6 +183,14 @@ export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClie
                           </div>
                         </div>
                         <div className="p-2 space-y-0.5">
+                          {profile?.is_admin && (
+                            <>
+                              <Link href="/admin" className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-rose-600 to-red-500 text-white hover:from-rose-700 hover:to-red-600 transition-all">
+                                <LayoutDashboard className="w-4 h-4" /> Bảng Quản Trị
+                              </Link>
+                              <div className="h-px bg-slate-100 mx-3 my-1" />
+                            </>
+                          )}
                           <Link href="/profile" className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
                             <User className="w-4 h-4 text-slate-400" /> Hồ Sơ Cá Nhân
                           </Link>
@@ -252,6 +260,11 @@ export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClie
                         <Coins className="w-4 h-4 text-rose-500" />
                         <span className="text-sm font-semibold text-slate-700">{(profile?.coin_balance ?? 0).toLocaleString('vi-VN')} VND</span>
                       </div>
+                      {profile?.is_admin && (
+                        <Link href="/admin" className="flex items-center gap-3 mx-4 my-1 px-3 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-rose-600 to-red-500 text-white">
+                          <LayoutDashboard className="w-4 h-4" /> Bảng Quản Trị
+                        </Link>
+                      )}
                       <Link href="/profile" className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50">
                         <User className="w-4 h-4" /> {profile?.display_name || user.email?.split('@')[0]}
                       </Link>

@@ -55,8 +55,16 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error || !transaction) {
-      console.error('[Recharge] Could not create transaction', error);
-      return NextResponse.json({ error: 'Không thể tạo giao dịch nạp tiền.' }, { status: 500 });
+      console.error('[Recharge] Could not create transaction', {
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+      });
+      return NextResponse.json(
+        { error: `Không thể tạo giao dịch nạp tiền. (${error?.code ?? 'unknown'})` },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({
