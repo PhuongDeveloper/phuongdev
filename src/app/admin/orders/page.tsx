@@ -3,6 +3,10 @@ import { CheckCircle2, Clock3, PackageCheck, ShoppingCart, XCircle } from 'lucid
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
+// Admin data depends on the authenticated request and server-only credentials.
+// Never execute these routes during static generation.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = { title: 'Đơn hàng | Admin' };
 
 const paymentLabel: Record<string, string> = { coin: 'Ví', bank_qr: 'QR Bank', free_trial: 'Miễn phí' };
@@ -47,4 +51,3 @@ export default async function AdminOrdersPage() {
     </div>
   );
 }
-

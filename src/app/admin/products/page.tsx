@@ -1,5 +1,9 @@
 import ProductsClient from './ProductsClient';
 import { createAdminClient } from '@/lib/supabase/admin';
+
+// Admin data depends on the authenticated request and server-only credentials.
+// Never execute these routes during static generation.
+export const dynamic = 'force-dynamic';
 import type { ProductWithVariants } from '@/lib/types/database';
 
 export default async function ProductsPage() {
@@ -24,4 +28,3 @@ export default async function ProductsPage() {
 
   return <ProductsClient initialData={enriched as ProductWithVariants[]} categories={categories || []} />;
 }
-

@@ -12,6 +12,10 @@ import {
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
+// Admin data depends on the authenticated request and server-only credentials.
+// Never execute these routes during static generation.
+export const dynamic = 'force-dynamic';
+
 function money(value: number) {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}tr`;
   if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
@@ -95,4 +99,3 @@ export default async function AdminDashboard() {
     </div>
   );
 }
-

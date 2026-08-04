@@ -3,6 +3,10 @@ import { AlertTriangle, CheckCircle2, CircleDollarSign, Clock3, Radio } from 'lu
 
 import { createAdminClient } from '@/lib/supabase/admin';
 
+// Admin data depends on the authenticated request and server-only credentials.
+// Never execute these routes during static generation.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = { title: 'Đối soát thanh toán | Admin' };
 
 export default async function TransactionsPage() {
@@ -37,4 +41,3 @@ export default async function TransactionsPage() {
     </div>
   );
 }
-
