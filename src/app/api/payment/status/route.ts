@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { syncZaloPayTransactions } from '@/lib/payments/zalopay';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,9 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Chưa đăng nhập.' }, { status: 401 });
+
+  // Đồng bộ giao dịch ZaloPay trước khi kiểm tra DB
+  await syncZaloPayTransactions();
 
   const admin = createAdminClient();
   const { data: transaction } = await admin
