@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import NavbarClient from './NavbarClient';
 
@@ -13,5 +14,9 @@ export default async function Navbar({ theme = 'light' }: { theme?: 'light' | 'd
     siteConfig[row.key] = row.value;
   });
 
-  return <NavbarClient siteConfig={siteConfig} theme={theme} />;
+  return (
+    <Suspense fallback={null}>
+      <NavbarClient siteConfig={siteConfig} theme={theme} />
+    </Suspense>
+  );
 }

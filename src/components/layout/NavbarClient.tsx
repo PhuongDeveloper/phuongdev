@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import {
@@ -35,6 +35,7 @@ interface NavbarClientProps {
 export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClientProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [authModal, setAuthModal] = useState<{ open: boolean; tab: 'login' | 'register' }>({ open: false, tab: 'login' });
@@ -43,6 +44,17 @@ export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClie
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
+
+  // Tự mở AuthModal khi middleware redirect về /?auth=login
+  useEffect(() => {
+    if (searchParams.get('auth') === 'login') {
+      setAuthModal({ open: true, tab: 'login' });
+      // Xoá param khỏi URL mà không reload trang
+      const url = new URL(window.location.href);
+      url.searchParams.delete('auth');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_, session) => {

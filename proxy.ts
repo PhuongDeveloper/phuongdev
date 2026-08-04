@@ -23,13 +23,8 @@ export async function proxy(request: NextRequest) {
 
   if (!user && (pathname.startsWith('/admin') || pathname.startsWith('/profile'))) {
     const url = request.nextUrl.clone();
-    if (pathname.startsWith('/admin')) {
-      url.pathname = '/login';
-      url.searchParams.set('next', pathname);
-    } else {
-      url.pathname = '/';
-      url.searchParams.set('auth', 'login');
-    }
+    url.pathname = '/';
+    url.searchParams.set('auth', 'login');
     return NextResponse.redirect(url);
   }
 
