@@ -256,7 +256,7 @@ export default function ProductPurchase({ product, variants }: ProductPurchasePr
           <h2 className="text-sm font-bold">Chọn thời hạn & phiên bản</h2>
           <span className="text-[11px] text-slate-400">{availableVariants.length} lựa chọn</span>
         </div>
-        <div className="max-h-[355px] space-y-2 overflow-y-auto pr-1">
+        <div className="max-h-[355px] space-y-2 overflow-y-auto pr-1 pt-2">
           {availableVariants.map((variant) => {
             const out = variant.inventory_policy === 'finite' && variant.stock_quantity <= 0;
             const active = variant.id === selected.id;

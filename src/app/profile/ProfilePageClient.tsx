@@ -112,32 +112,32 @@ export default function ProfilePageClient() {
         <div className="max-w-4xl mx-auto px-4">
 
           {/* Profile Header Card */}
-          <Card variant="solid" padding="none" className="mb-6 overflow-hidden">
-            <div className="bg-gradient-to-r from-rose-600 to-red-500 p-6 text-white">
+          <Card variant="solid" padding="none" className="mb-6 overflow-hidden border-slate-200">
+            <div className="bg-slate-900 p-6 text-white">
               <div className="flex items-center justify-between flex-wrap gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-xl font-bold flex-shrink-0">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-xl font-bold flex-shrink-0 text-slate-300">
                     {(profile?.display_name || profile?.email || 'U')[0].toUpperCase()}
                   </div>
                   <div>
-                    <h1 className="text-xl font-bold">{profile?.display_name || 'Người dùng'}</h1>
-                    <p className="text-rose-200 text-sm">{profile?.email}</p>
+                    <h1 className="text-xl font-bold text-white">{profile?.display_name || 'Người dùng'}</h1>
+                    <p className="text-slate-400 text-sm">{profile?.email}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="bg-white/15 border border-white/20 rounded-xl px-4 py-2.5 text-center">
-                    <div className="flex items-center gap-1.5 text-rose-100 text-xs mb-1">
+                  <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-center">
+                    <div className="flex items-center gap-1.5 text-slate-400 text-xs mb-1">
                       <Coins className="w-3.5 h-3.5" />
                       <span>Số dư ví</span>
                     </div>
-                    <div className="text-xl font-black">{(profile?.coin_balance ?? 0).toLocaleString('vi-VN')}</div>
-                    <div className="text-rose-200 text-xs">VND</div>
+                    <div className="text-xl font-black text-rose-500">{(profile?.coin_balance ?? 0).toLocaleString('vi-VN')}</div>
+                    <div className="text-slate-400 text-xs">VND</div>
                   </div>
                   <Button
-                    variant="secondary"
+                    variant="solid"
                     size="sm"
                     onClick={() => setWalletOpen(true)}
-                    className="bg-white text-rose-600 border-white hover:bg-rose-50"
+                    className="bg-rose-600 text-white hover:bg-rose-700 border-none shadow-sm h-full py-2.5"
                   >
                     Nạp Tiền
                   </Button>

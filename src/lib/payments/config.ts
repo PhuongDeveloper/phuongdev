@@ -9,13 +9,6 @@ export const paymentConfig = {
 
 export function createVietQrUrl(amount: number, transactionCode: string) {
   const { bankId, accountNumber, accountName } = paymentConfig;
-  
-  if (bankId.toUpperCase() === 'ZALOPAY') {
-    // ZaloPay custom string format: 2|99|phone|name|email|0|0|amount|note
-    const zaloString = `2|99|${accountNumber}|${accountName}||0|0|${amount}|${transactionCode}`;
-    return `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(zaloString)}`;
-  }
-
   const query = new URLSearchParams({
     amount: String(amount),
     addInfo: transactionCode,
