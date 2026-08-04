@@ -24,6 +24,8 @@ import {
   User,
   FileText,
   Tags,
+  ShoppingCart,
+  TrendingUp,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/utils/helpers';
@@ -38,6 +40,8 @@ const adminLinks = [
   { href: '/admin/products', label: 'Sản Phẩm', icon: ShoppingBag },
   { href: '/admin/categories', label: 'Danh Mục', icon: Tags },
   { href: '/admin/blogs', label: 'Bài Viết (Blog)', icon: FileText },
+  { href: '/admin/orders', label: 'Đơn Hàng', icon: ShoppingCart },
+  { href: '/admin/users', label: 'Người Dùng', icon: Users },
   { href: '/admin/communities', label: 'Cộng Đồng', icon: Users },
   { href: '/admin/account', label: 'Đổi Mật Khẩu', icon: Shield },
 ];
