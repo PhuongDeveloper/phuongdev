@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { ensureUserProfile } from '@/lib/auth/ensure-user-profile';
 import { createVietQrUrl, paymentConfig, publicBankDetails } from '@/lib/payments/config';
 import { createTransactionCode } from '@/lib/payments/transaction-code';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -41,6 +42,13 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createAdminClient();
+    try {
+      await ensureUserProfile(admin, user);
+    } catch (profileError) {
+      console.error('[Purchase] Could not ensure user profile', profileError);
+      return NextResponse.json({ error: 'Không thể khởi tạo hồ sơ mua hàng. Vui lòng thử lại.' }, { status: 500 });
+    }
+
     let variantId = payload.variant_id;
 
     // Backwards compatibility for older clients that only submit product_id.
@@ -157,4 +165,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Hệ thống mua hàng đang bận. Vui lòng thử lại.' }, { status: 500 });
   }
 }
-

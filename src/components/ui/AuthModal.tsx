@@ -22,6 +22,16 @@ interface AuthModalProps {
   defaultTab?: 'login' | 'register';
 }
 
+async function readAuthResponse(response: Response) {
+  const text = await response.text();
+  if (!text) return {} as { error?: string; success?: boolean };
+  try {
+    return JSON.parse(text) as { error?: string; success?: boolean };
+  } catch {
+    return { error: `Máy chủ từ chối yêu cầu đăng ký (${response.status}).` };
+  }
+}
+
 export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: AuthModalProps) {
   const router = useRouter();
   const [tab, setTab] = useState<'login' | 'register'>(defaultTab);
@@ -72,20 +82,45 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
       setMessage({ type: 'error', text: 'Mật khẩu phải có ít nhất 6 ký tự.' });
       setIsLoading(false); return;
     }
-    const { error } = await supabase.auth.signUp({
-      email, password,
-      options: { data: { full_name: displayName || email.split('@')[0] } },
-    });
-    if (error) {
-      const msg = error.message.includes('already registered')
-        ? 'Email này đã được đăng ký. Vui lòng đăng nhập.'
-        : error.message;
-      setMessage({ type: 'error', text: msg });
-    } else {
-      setMessage({ type: 'success', text: 'Đăng ký thành công! Vui lòng kiểm tra email để xác nhận tài khoản.' });
-      setTimeout(() => handleTabChange('login'), 3000);
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify({
+          email: normalizedEmail,
+          password,
+          display_name: displayName.trim(),
+        }),
+      });
+      const result = await readAuthResponse(response);
+      if (!response.ok) {
+        setMessage({ type: 'error', text: result.error || 'Không thể tạo tài khoản.' });
+        return;
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+      if (signInError) {
+        setMessage({ type: 'success', text: 'Tài khoản đã được tạo. Bạn có thể đăng nhập ngay.' });
+        window.setTimeout(() => handleTabChange('login'), 1800);
+        return;
+      }
+
+      setMessage({ type: 'success', text: 'Tạo tài khoản thành công! Đang đăng nhập...' });
+      window.setTimeout(() => {
+        onClose();
+        router.refresh();
+      }, 500);
+    } catch {
+      setMessage({ type: 'error', text: 'Không thể kết nối máy chủ. Vui lòng thử lại.' });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleGoogleLogin = async () => {
@@ -231,22 +266,22 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
                 <form onSubmit={handleRegister} className="space-y-3">
                   <div className="relative">
                     <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    <input type="text" placeholder="Tên hiển thị (tuỳ chọn)" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className={cn(inputCls, 'pl-10')} />
+                    <input type="text" maxLength={80} placeholder="Tên hiển thị (tuỳ chọn)" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className={cn(inputCls, 'pl-10')} />
                   </div>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className={cn(inputCls, 'pl-10')} />
+                    <input type="email" maxLength={254} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className={cn(inputCls, 'pl-10')} />
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    <input type={showPassword ? 'text' : 'password'} placeholder="Mật khẩu (ít nhất 6 ký tự)" value={password} onChange={(e) => setPassword(e.target.value)} required className={cn(inputCls, 'pl-10 pr-11')} />
+                    <input type={showPassword ? 'text' : 'password'} minLength={6} maxLength={72} placeholder="Mật khẩu (ít nhất 6 ký tự)" value={password} onChange={(e) => setPassword(e.target.value)} required className={cn(inputCls, 'pl-10 pr-11')} />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer">
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    <input type={showPassword ? 'text' : 'password'} placeholder="Xác nhận mật khẩu" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className={cn(inputCls, 'pl-10')} />
+                    <input type={showPassword ? 'text' : 'password'} minLength={6} maxLength={72} placeholder="Xác nhận mật khẩu" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className={cn(inputCls, 'pl-10')} />
                   </div>
                   <Button type="submit" variant="primary" className="w-full justify-center" isLoading={isLoading}>
                     Tạo Tài Khoản

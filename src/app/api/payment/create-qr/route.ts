@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { ensureUserProfile } from '@/lib/auth/ensure-user-profile';
 import { createVietQrUrl, publicBankDetails } from '@/lib/payments/config';
 import { createTransactionCode } from '@/lib/payments/transaction-code';
 import { createClient } from '@/lib/supabase/server';
@@ -39,6 +40,13 @@ export async function POST(request: NextRequest) {
     const transactionCode = createTransactionCode();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     const admin = createAdminClient();
+    try {
+      await ensureUserProfile(admin, user);
+    } catch (profileError) {
+      console.error('[Recharge] Could not ensure user profile', profileError);
+      return NextResponse.json({ error: 'Không thể khởi tạo hồ sơ nạp tiền.' }, { status: 500 });
+    }
+
     const { data: transaction, error } = await admin
       .from('transactions')
       .insert({

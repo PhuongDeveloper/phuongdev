@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { ensureUserProfile } from '@/lib/auth/ensure-user-profile';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 
@@ -11,6 +12,13 @@ export async function POST(request: NextRequest) {
 
   const { product_id, variant_id } = (await request.json()) as { product_id?: string; variant_id?: string };
   const admin = createAdminClient();
+  try {
+    await ensureUserProfile(admin, user);
+  } catch (profileError) {
+    console.error('[Trial] Could not ensure user profile', profileError);
+    return NextResponse.json({ error: 'Không thể khởi tạo hồ sơ nhận sản phẩm.' }, { status: 500 });
+  }
+
   let variantId = variant_id;
 
   if (!variantId && product_id) {
@@ -39,4 +47,3 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ ...result, message: 'Đã cấp gói dùng thử vào tài khoản của bạn.' });
 }
-
