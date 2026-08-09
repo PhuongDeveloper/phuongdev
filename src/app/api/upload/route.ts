@@ -8,15 +8,17 @@
    ========================================================================== */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { getAdminSession } from '@/lib/auth/admin';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    // Kiểm tra xác thực - dựa vào cookie admin_auth thay vì Supabase Auth
-    const adminAuthCookie = request.cookies.get('admin_auth');
-    if (adminAuthCookie?.value !== 'phuongdev') {
+    // Dùng cùng phiên Supabase Auth với toàn bộ trang quản trị.
+    const adminSession = await getAdminSession();
+    if (!adminSession) {
       return NextResponse.json(
-        { error: 'Chưa xác thực. Vui lòng đăng nhập.' },
+        { error: 'Phiên quản trị không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.' },
         { status: 401 }
       );
     }

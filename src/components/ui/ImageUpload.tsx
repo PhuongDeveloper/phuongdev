@@ -6,6 +6,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import Image from 'next/image';
 import { Upload, X, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/helpers';
 
@@ -14,6 +15,20 @@ interface ImageUploadProps {
   onChange: (url: string | null) => void;
   label?: string;
   className?: string;
+}
+
+async function readUploadResponse(response: Response) {
+  const text = await response.text();
+  if (!text) return {} as { error?: string; url?: string };
+  try {
+    return JSON.parse(text) as { error?: string; url?: string };
+  } catch {
+    return {
+      error: response.ok
+        ? 'Máy chủ trả về dữ liệu ảnh không hợp lệ.'
+        : `Upload thất bại (mã ${response.status}).`,
+    };
+  }
 }
 
 export default function ImageUpload({
@@ -41,14 +56,17 @@ export default function ImageUpload({
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
+        credentials: 'same-origin',
+        cache: 'no-store',
       });
 
-      const data = await response.json();
+      const data = await readUploadResponse(response);
 
       if (!response.ok) {
         throw new Error(data.error || 'Không thể upload ảnh.');
       }
 
+      if (!data.url) throw new Error('Máy chủ không trả về đường dẫn ảnh.');
       onChange(data.url);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đã xảy ra lỗi khi upload ảnh.');
@@ -75,10 +93,12 @@ export default function ImageUpload({
 
       {/* Khu vực hiển thị ảnh hoặc nút upload */}
       {value ? (
-        <div className="relative group rounded-xl overflow-hidden border border-slate-200">
-          <img
+        <div className="relative h-48 group rounded-xl overflow-hidden border border-slate-200">
+          <Image
             src={value}
             alt="Ảnh đã upload"
+            fill
+            sizes="(max-width: 768px) 100vw, 640px"
             className="w-full h-48 object-cover"
           />
           {/* Nút xoá ảnh */}
