@@ -29,7 +29,7 @@ export default async function StorePage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar />
+      <Navbar siteConfig={siteConfig} />
       <main className="pt-24 pb-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <ProductsList products={products || []} />

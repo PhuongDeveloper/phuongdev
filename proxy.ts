@@ -25,13 +25,18 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     url.searchParams.set('auth', 'login');
-    return NextResponse.redirect(url);
+    const redirectResponse = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
   }
 
   return response;
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/profile/:path*', '/profile'],
+  // Supabase cần có cơ hội làm mới cookie trên mọi lần điều hướng, không chỉ
+  // ở trang bảo vệ. Bỏ qua tài nguyên tĩnh để không tạo request thừa.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+  ],
 };
-

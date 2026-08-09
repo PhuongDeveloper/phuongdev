@@ -27,7 +27,7 @@ export default async function AboutPage() {
 
   return (
     <>
-      <Navbar />
+      <Navbar siteConfig={siteConfig} />
       <main className="min-h-screen pb-20 bg-slate-50/50">
         <AboutClient siteConfig={siteConfig} />
       </main>

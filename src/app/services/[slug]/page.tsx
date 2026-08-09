@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createElement } from 'react';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -41,31 +42,28 @@ export default async function ServiceDetailPage({ params }: { params: Promise<{ 
   const resolvedParams = await params;
   const supabase = await createClient();
 
-  const { data: service } = await supabase
-    .from('services')
-    .select('*')
-    .eq('slug', resolvedParams.slug)
-    .single();
+  const [{ data: service }, { data: configRows }] = await Promise.all([
+    supabase.from('services').select('*').eq('slug', resolvedParams.slug).single(),
+    supabase.from('site_config').select('key, value'),
+  ]);
 
   if (!service) {
     notFound();
   }
-
-  const { data: configRows } = await supabase
-    .from('site_config')
-    .select('key, value');
 
   const siteConfig: Record<string, string> = {};
   configRows?.forEach((row) => {
     siteConfig[row.key] = row.value;
   });
 
-  const Icon = getIconByName(service.icon_name);
+  const icon = createElement(getIconByName(service.icon_name), {
+    className: 'w-10 h-10 text-rose-600',
+  });
 
   return (
     <div className="bg-slate-50 min-h-screen flex flex-col">
       <ViewTracker table="services" slug={service.slug} />
-      <Navbar />
+      <Navbar siteConfig={siteConfig} />
 
       <article className="flex-1 pt-24 pb-20">
         {service.image_url && (
@@ -98,7 +96,7 @@ export default async function ServiceDetailPage({ params }: { params: Promise<{ 
             
             <div className="flex items-start gap-6 relative z-10 flex-col md:flex-row">
               <div className="p-5 rounded-2xl bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100">
-                <Icon className="w-10 h-10 text-rose-600" />
+                {icon}
               </div>
               <div>
                 <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-4">

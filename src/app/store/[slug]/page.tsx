@@ -79,7 +79,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <ViewTracker table="products" slug={product.slug} />
-      <Navbar />
+      <Navbar siteConfig={siteConfig} />
 
       <main className="pb-20 pt-20">
         <div className="border-b border-slate-200 bg-white">

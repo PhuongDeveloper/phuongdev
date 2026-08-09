@@ -6,6 +6,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Mail, Lock, User, Eye, EyeOff, Loader2,
@@ -22,6 +23,7 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: AuthModalProps) {
+  const router = useRouter();
   const [tab, setTab] = useState<'login' | 'register'>(defaultTab);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -51,7 +53,10 @@ export default function AuthModal({ isOpen, onClose, defaultTab = 'login' }: Aut
       setMessage({ type: 'error', text: 'Email hoặc mật khẩu không đúng.' });
     } else {
       setMessage({ type: 'success', text: 'Đăng nhập thành công!' });
-      setTimeout(() => { onClose(); window.location.reload(); }, 800);
+      window.setTimeout(() => {
+        onClose();
+        router.refresh();
+      }, 350);
     }
     setIsLoading(false);
   };

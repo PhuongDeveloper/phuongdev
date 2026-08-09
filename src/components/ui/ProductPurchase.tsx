@@ -106,11 +106,6 @@ export default function ProductPurchase({ product, variants }: ProductPurchasePr
   }, [supabase]);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      const currentUser = data.user ? { id: data.user.id, email: data.user.email } : null;
-      setUser(currentUser);
-      if (currentUser) loadProfile(currentUser.id);
-    });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user ? { id: session.user.id, email: session.user.email } : null;
       setUser(currentUser);
@@ -162,7 +157,7 @@ export default function ProductPurchase({ product, variants }: ProductPurchasePr
     } finally {
       setChecking(false);
     }
-  }, [checking, loadProfile, product, qrData, selected, user]);
+  }, [checking, loadProfile, qrData, user]);
 
   useEffect(() => {
     if (status !== 'qr_pending') return;
@@ -179,15 +174,22 @@ export default function ProductPurchase({ product, variants }: ProductPurchasePr
     setSuccessData(null);
   };
 
-  const requireAuth = () => {
+  const requireAuth = async () => {
     if (user) return true;
+    const { data } = await supabase.auth.getUser();
+    if (data.user) {
+      const currentUser = { id: data.user.id, email: data.user.email };
+      setUser(currentUser);
+      void loadProfile(currentUser.id);
+      return true;
+    }
     setShowLoginHint(true);
     document.getElementById('navbar-login-btn')?.click();
     return false;
   };
 
   const purchase = async (paymentMethod: 'coin' | 'bank_qr') => {
-    if (!selected || isOutOfStock || !requireAuth()) return;
+    if (!selected || isOutOfStock || !(await requireAuth())) return;
     setStatus('loading');
     setError('');
     try {

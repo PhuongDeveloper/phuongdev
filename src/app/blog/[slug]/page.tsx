@@ -37,21 +37,15 @@ export default async function BlogDetailPage({ params }: { params: Promise<{ slu
   const resolvedParams = await params;
   const supabase = await createClient();
 
-  const { data: configRows } = await supabase
-    .from('site_config')
-    .select('key, value');
+  const [{ data: configRows }, { data: blog }] = await Promise.all([
+    supabase.from('site_config').select('key, value'),
+    supabase.from('blogs').select('*').eq('slug', resolvedParams.slug).eq('is_published', true).single(),
+  ]);
 
   const siteConfig: Record<string, string> = {};
   configRows?.forEach((row) => {
     siteConfig[row.key] = row.value;
   });
-
-  const { data: blog } = await supabase
-    .from('blogs')
-    .select('*')
-    .eq('slug', resolvedParams.slug)
-    .eq('is_published', true)
-    .single();
 
   if (!blog) {
     notFound();
@@ -60,7 +54,7 @@ export default async function BlogDetailPage({ params }: { params: Promise<{ slu
   return (
     <div className="bg-white min-h-screen flex flex-col">
       <ViewTracker table="blogs" slug={blog.slug} />
-      <Navbar />
+      <Navbar siteConfig={siteConfig} />
       <article className="pt-24 pb-20 flex-1">
         {/* Cover Image Header */}
       {blog.cover_image && (

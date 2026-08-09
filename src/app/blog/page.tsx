@@ -14,24 +14,19 @@ export const metadata = {
 export default async function BlogPage() {
   const supabase = await createClient();
 
-  const { data: configRows } = await supabase
-    .from('site_config')
-    .select('key, value');
+  const [{ data: configRows }, { data: blogs }] = await Promise.all([
+    supabase.from('site_config').select('key, value'),
+    supabase.from('blogs').select('*').eq('is_published', true).order('published_at', { ascending: false }),
+  ]);
 
   const siteConfig: Record<string, string> = {};
   configRows?.forEach((row) => {
     siteConfig[row.key] = row.value;
   });
 
-  const { data: blogs } = await supabase
-    .from('blogs')
-    .select('*')
-    .eq('is_published', true)
-    .order('published_at', { ascending: false });
-
   return (
     <div className="bg-slate-50 min-h-screen flex flex-col">
-      <Navbar />
+      <Navbar siteConfig={siteConfig} />
       <div className="pt-32 pb-20 flex-1">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         

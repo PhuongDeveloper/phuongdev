@@ -30,60 +30,87 @@ const navLinks = [
 interface NavbarClientProps {
   siteConfig: Record<string, string>;
   theme?: 'light' | 'dark';
+  initialUser: { id: string; email?: string } | null;
+  initialProfile: UserProfile | null;
 }
 
-export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClientProps) {
+export default function NavbarClient({
+  siteConfig,
+  theme = 'light',
+  initialUser,
+  initialProfile,
+}: NavbarClientProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [authModal, setAuthModal] = useState<{ open: boolean; tab: 'login' | 'register' }>({ open: false, tab: 'login' });
-  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(initialUser);
+  const [profile, setProfile] = useState<UserProfile | null>(initialProfile);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  // Giữ 1 instance duy nhất, tránh tạo lại mỗi render
-  const supabaseRef = useRef(createClient());
+  const currentUserIdRef = useRef(initialUser?.id ?? null);
+  const profileRef = useRef(initialProfile);
+  const supabase = createClient();
 
   // Tự mở AuthModal khi middleware redirect về /?auth=login
   useEffect(() => {
     if (searchParams.get('auth') === 'login') {
-      setAuthModal({ open: true, tab: 'login' });
       const url = new URL(window.location.href);
       url.searchParams.delete('auth');
       window.history.replaceState({}, '', url.toString());
+      const timer = window.setTimeout(() => setAuthModal({ open: true, tab: 'login' }), 0);
+      return () => window.clearTimeout(timer);
     }
   }, [searchParams]);
 
   useEffect(() => {
-    const supabase = supabaseRef.current;
+    let active = true;
+    let profileRequest = 0;
 
-    // Kiểm tra session ngay khi mount — tránh mất trạng thái khi reload / chuyển tab
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-          .then(({ data }) => setProfile(data));
-      }
-    });
+    // Callback auth phải đồng bộ. Truy vấn Supabase ngay trong callback có thể
+    // giữ khóa của auth client và tạo ra trạng thái phiên chập chờn.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextUser = session?.user
+        ? { id: session.user.id, email: session.user.email }
+        : null;
+      const previousUserId = currentUserIdRef.current;
+      currentUserIdRef.current = nextUser?.id ?? null;
+      setUser(nextUser);
 
-    // Lắng nghe thay đổi auth (login, logout, token refresh, tab focus...)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const { data } = await supabase.from('user_profiles').select('*').eq('id', session.user.id).single();
-        setProfile(data);
-      } else {
+      if (!nextUser) {
+        profileRequest += 1;
+        profileRef.current = null;
         setProfile(null);
+      } else if (profileRef.current?.id !== nextUser.id) {
+        const requestId = ++profileRequest;
+        window.setTimeout(() => {
+          void supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', nextUser.id)
+            .maybeSingle()
+            .then(({ data }) => {
+              if (!active || requestId !== profileRequest || currentUserIdRef.current !== nextUser.id) return;
+              profileRef.current = data;
+              setProfile(data);
+            });
+        }, 0);
+      }
+
+      if (
+        (event === 'SIGNED_IN' && previousUserId !== nextUser?.id)
+        || (event === 'SIGNED_OUT' && previousUserId !== null)
+      ) {
+        window.setTimeout(() => router.refresh(), 0);
       }
     });
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [router, supabase]);
 
 
   useEffect(() => {
@@ -101,12 +128,15 @@ export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClie
   }, []);
 
   useEffect(() => {
-    setIsMobileMenuOpen(false);
-    setDropdownOpen(false);
+    const timer = window.setTimeout(() => {
+      setIsMobileMenuOpen(false);
+      setDropdownOpen(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [pathname]);
 
   const handleLogout = async () => {
-    await supabaseRef.current.auth.signOut();
+    await supabase.auth.signOut();
     setDropdownOpen(false);
     router.push('/');
     router.refresh();
@@ -135,7 +165,7 @@ export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClie
             <Link href="/" className="flex items-center gap-2 group">
               {logoUrl ? (
                 <div className="relative h-14 w-[200px] flex items-center">
-                  <Image src={logoUrl} alt="PhuongDev Logo" fill className="object-contain object-left" />
+                  <Image src={logoUrl} alt="PhuongDev Logo" fill sizes="200px" className="object-contain object-left" />
                 </div>
               ) : (
                 <>
@@ -320,7 +350,7 @@ export default function NavbarClient({ siteConfig, theme = 'light' }: NavbarClie
         </nav>
       </motion.header>
 
-      <AuthModal isOpen={authModal.open} onClose={() => setAuthModal({ open: false, tab: 'login' })} defaultTab={authModal.tab} />
+      <AuthModal key={`${authModal.open}-${authModal.tab}`} isOpen={authModal.open} onClose={() => setAuthModal({ open: false, tab: 'login' })} defaultTab={authModal.tab} />
     </>
   );
 }

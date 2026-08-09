@@ -8,7 +8,7 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { Users, Link as LinkIcon, Image as ImageIcon } from 'lucide-react';
+import { Users, Link as LinkIcon } from 'lucide-react';
 import Image from 'next/image';
 
 export const metadata: Metadata = {
@@ -19,26 +19,19 @@ export const metadata: Metadata = {
 export default async function CommunityPage() {
   const supabase = await createClient();
 
-  // Lấy site config
-  const { data: configRows } = await supabase
-    .from('site_config')
-    .select('key, value');
+  const [{ data: configRows }, { data: communities }] = await Promise.all([
+    supabase.from('site_config').select('key, value'),
+    supabase.from('communities').select('*').eq('is_active', true).order('sort_order', { ascending: true }),
+  ]);
 
   const siteConfig: Record<string, string> = {};
   configRows?.forEach((row) => {
     siteConfig[row.key] = row.value;
   });
 
-  // Lấy danh sách cộng đồng từ bảng communities
-  const { data: communities } = await supabase
-    .from('communities')
-    .select('*')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true });
-
   return (
     <>
-      <Navbar />
+      <Navbar siteConfig={siteConfig} />
       <main className="min-h-screen pt-24 pb-16 bg-slate-50">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}

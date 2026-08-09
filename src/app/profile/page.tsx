@@ -23,7 +23,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <Navbar />
+      <Navbar siteConfig={siteConfig} />
       <Suspense fallback={
         <main className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />

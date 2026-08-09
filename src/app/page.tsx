@@ -14,50 +14,28 @@ import FeaturedProjects from '@/components/sections/FeaturedProjects';
 export default async function HomePage() {
   const supabase = await createClient();
 
-  // Lấy cấu hình site từ database
-  const { data: configRows } = await supabase
-    .from('site_config')
-    .select('key, value');
+  const [
+    { data: configRows },
+    { data: projects },
+    { data: services },
+    { data: products },
+    { data: blogs },
+  ] = await Promise.all([
+    supabase.from('site_config').select('key, value'),
+    supabase.from('projects').select('*').eq('is_featured', true).order('sort_order', { ascending: true }).limit(10),
+    supabase.from('services').select('*').order('sort_order', { ascending: true }).limit(3),
+    supabase.from('products').select('id,title,slug,description,price,demo_url,image_url,category,is_active,badge,total_sold,is_featured,sort_order,views,created_at,updated_at').eq('is_active', true).order('sort_order', { ascending: true }).limit(3),
+    supabase.from('blogs').select('*').eq('is_published', true).order('created_at', { ascending: false }).limit(3),
+  ]);
 
   const siteConfig: Record<string, string> = {};
   configRows?.forEach((row) => {
     siteConfig[row.key] = row.value;
   });
 
-  // Lấy danh sách dự án nổi bật (limit 10 để lướt ngang)
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('*')
-    .eq('is_featured', true)
-    .order('sort_order', { ascending: true })
-    .limit(10);
-
-  // Lấy danh sách dịch vụ (limit 3)
-  const { data: services } = await supabase
-    .from('services')
-    .select('*')
-    .order('sort_order', { ascending: true })
-    .limit(3);
-
-  // Lấy danh sách sản phẩm nổi bật (limit 3)
-  const { data: products } = await supabase
-    .from('products')
-    .select('id,title,slug,description,price,demo_url,image_url,category,is_active,badge,total_sold,is_featured,sort_order,views,created_at,updated_at')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-    .limit(3);
-
-  // Lấy danh sách blog mới nhất (limit 3)
-  const { data: blogs } = await supabase
-    .from('blogs')
-    .select('*')
-    .eq('is_published', true)
-    .order('created_at', { ascending: false })
-    .limit(3);
-
   return (
     <div className="bg-white selection:bg-rose-100 selection:text-rose-900">
-      <Navbar />
+      <Navbar siteConfig={siteConfig} />
       <main className="min-h-screen">
         <HeroSection siteConfig={siteConfig} />
         

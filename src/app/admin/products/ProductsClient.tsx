@@ -68,6 +68,16 @@ function formatPrice(value: number) {
   return value === 0 ? 'Miễn phí' : `${value.toLocaleString('vi-VN')}đ`;
 }
 
+async function readApiResult(response: Response) {
+  const text = await response.text();
+  if (!text) return {} as { error?: string; product?: AdminProduct };
+  try {
+    return JSON.parse(text) as { error?: string; product?: AdminProduct };
+  } catch {
+    return { error: response.ok ? 'Phản hồi từ máy chủ không hợp lệ.' : `Máy chủ từ chối yêu cầu (${response.status}).` };
+  }
+}
+
 export default function ProductsClient({ initialData, categories }: ProductsClientProps) {
   const [products, setProducts] = useState<AdminProduct[]>(initialData as AdminProduct[]);
   const [query, setQuery] = useState('');
@@ -75,6 +85,8 @@ export default function ProductsClient({ initialData, categories }: ProductsClie
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [busyProductId, setBusyProductId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ProductDraft>(() => defaultProduct(categories[0]?.slug || 'other'));
   const [variants, setVariants] = useState<DraftVariant[]>([defaultVariant()]);
   const [galleryText, setGalleryText] = useState('');
@@ -123,8 +135,22 @@ export default function ProductsClient({ initialData, categories }: ProductsClie
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    setSaving(true);
     setError('');
+
+    const normalizedSkus = variants.map((variant) => variant.sku.trim().toUpperCase());
+    if (new Set(normalizedSkus).size !== normalizedSkus.length) {
+      setError('Các gói trong cùng sản phẩm không được trùng SKU.');
+      return;
+    }
+    const invalidComparePrice = variants.find((variant) => (
+      variant.compare_at_price != null && variant.compare_at_price < variant.price
+    ));
+    if (invalidComparePrice) {
+      setError(`Giá so sánh của "${invalidComparePrice.name}" phải lớn hơn hoặc bằng giá bán.`);
+      return;
+    }
+
+    setSaving(true);
     try {
       const body = {
         id: editing?.id,
@@ -145,10 +171,11 @@ export default function ProductsClient({ initialData, categories }: ProductsClie
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const result = await response.json();
+      const result = await readApiResult(response);
       if (!response.ok) throw new Error(result.error || 'Không thể lưu sản phẩm.');
 
-      const saved = result.product as AdminProduct;
+      const saved = result.product;
+      if (!saved) throw new Error('Sản phẩm đã lưu nhưng máy chủ không trả lại dữ liệu mới.');
       setProducts((current) => editing ? current.map((item) => item.id === saved.id ? saved : item) : [...current, saved]);
       setModalOpen(false);
     } catch (saveError) {
@@ -161,14 +188,38 @@ export default function ProductsClient({ initialData, categories }: ProductsClie
   const archive = async (product: AdminProduct) => {
     const action = product.is_active ? 'dừng bán' : 'mở bán lại';
     if (!window.confirm(`${action === 'dừng bán' ? 'Dừng bán' : 'Mở bán lại'} "${product.title}"?`)) return;
-    const response = await fetch('/api/admin/products', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: product.id }) });
-    if (response.ok) setProducts((current) => current.map((item) => item.id === product.id ? { ...item, is_active: !item.is_active } : item));
+    setActionError('');
+    setBusyProductId(product.id);
+    try {
+      const response = await fetch('/api/admin/products', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: product.id }) });
+      const result = await readApiResult(response);
+      if (!response.ok) throw new Error(result.error || 'Không thể đổi trạng thái sản phẩm.');
+      setProducts((current) => current.map((item) => item.id === product.id ? { ...item, is_active: !item.is_active } : item));
+    } catch (archiveError) {
+      setActionError(archiveError instanceof Error ? archiveError.message : 'Không thể đổi trạng thái sản phẩm.');
+    } finally {
+      setBusyProductId(null);
+    }
   };
 
   const deleteProduct = async (product: AdminProduct) => {
-    if (!window.confirm(`Xóa vĩnh viễn "${product.title}"?\n\nThành tác này không thể hoàn tác!`)) return;
-    const response = await fetch('/api/admin/products', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: product.id, permanent: true }) });
-    if (response.ok) setProducts((current) => current.filter((item) => item.id !== product.id));
+    setActionError('');
+    if ((product.total_sold || 0) > 0) {
+      setActionError(`"${product.title}" đã có đơn hàng nên không thể xóa vĩnh viễn. Hãy dùng nút Dừng bán để giữ lịch sử khách hàng.`);
+      return;
+    }
+    if (!window.confirm(`Xóa vĩnh viễn "${product.title}"?\n\nThao tác này không thể hoàn tác!`)) return;
+    setBusyProductId(product.id);
+    try {
+      const response = await fetch('/api/admin/products', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: product.id, permanent: true }) });
+      const result = await readApiResult(response);
+      if (!response.ok) throw new Error(result.error || 'Không thể xóa sản phẩm.');
+      setProducts((current) => current.filter((item) => item.id !== product.id));
+    } catch (deleteError) {
+      setActionError(deleteError instanceof Error ? deleteError.message : 'Không thể xóa sản phẩm.');
+    } finally {
+      setBusyProductId(null);
+    }
   };
 
   return (
@@ -177,6 +228,14 @@ export default function ProductsClient({ initialData, categories }: ProductsClie
         <div><p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#ed4c50]">Catalog operations</p><h2 className="mt-1 text-3xl font-black tracking-[-0.035em]">Sản phẩm & tồn kho</h2><p className="mt-2 text-sm text-slate-500">Mỗi sản phẩm có nhiều gói, giá, kho và key riêng.</p></div>
         <button type="button" onClick={openCreate} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#ed4c50] px-4 text-sm font-black text-white shadow-lg shadow-red-200 transition hover:bg-[#db3f44]"><Plus className="h-4 w-4" />Thêm sản phẩm</button>
       </div>
+
+      {actionError && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{actionError}</span>
+          <button type="button" onClick={() => setActionError('')} className="ml-auto text-xs font-black uppercase tracking-wide text-amber-700 hover:text-amber-900">Đóng</button>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-3">
         {[
@@ -204,15 +263,15 @@ export default function ProductsClient({ initialData, categories }: ProductsClie
                 <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{activeVariants.length} gói · giá từ</p><p className="mt-1 text-sm font-black text-[#ed4c50]">{formatPrice(prices.length ? Math.min(...prices) : product.price)}</p></div>
                 <div><p className={cn('flex items-center gap-1.5 text-xs font-bold', available ? 'text-emerald-600' : 'text-red-500')}><span className={cn('h-1.5 w-1.5 rounded-full', available ? 'bg-emerald-500' : 'bg-red-500')} />{available ? 'Còn hàng' : 'Hết hàng'}</p><p className="mt-1 text-[11px] text-slate-400">Kho: {stock} · Đã bán: {product.total_sold || 0}</p></div>
                 <div className="flex items-center justify-end gap-1">
-                  <button type="button" onClick={() => openEdit(product)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600" title="Chỉnh sửa">
+                  <button type="button" disabled={busyProductId === product.id} onClick={() => openEdit(product)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-wait disabled:opacity-50" title="Chỉnh sửa">
                     <Pencil className="h-4 w-4" />
                   </button>
-                  <button type="button" onClick={() => archive(product)}
-                    className={cn('grid h-9 w-9 place-items-center rounded-xl border transition', product.is_active ? 'border-slate-200 text-slate-400 hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600' : 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100')}
+                  <button type="button" disabled={busyProductId === product.id} onClick={() => archive(product)}
+                    className={cn('grid h-9 w-9 place-items-center rounded-xl border transition disabled:cursor-wait disabled:opacity-50', product.is_active ? 'border-slate-200 text-slate-400 hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600' : 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100')}
                     title={product.is_active ? 'Dừng bán' : 'Mở bán lại'}>
                     {product.is_active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
-                  <button type="button" onClick={() => deleteProduct(product)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-400 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600" title="Xóa vĩnh viễn">
+                  <button type="button" disabled={busyProductId === product.id} onClick={() => deleteProduct(product)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 text-slate-400 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:cursor-wait disabled:opacity-50" title={(product.total_sold || 0) > 0 ? 'Sản phẩm đã có đơn — chỉ có thể dừng bán' : 'Xóa vĩnh viễn'}>
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -249,7 +308,7 @@ export default function ProductsClient({ initialData, categories }: ProductsClie
                   <div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-slate-900 text-white"><KeyRound className="h-4 w-4" /></span><div><p className="text-xs font-black">Gói #{index + 1}</p><p className="text-[10px] text-slate-400">{variant.available_keys || 0} key sẵn sàng</p></div></div><button type="button" onClick={() => removeVariant(index)} className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div>
                   <div className="grid gap-3 md:grid-cols-4"><label className="md:col-span-2"><span className={labelClass}>Tên gói</span><input required value={variant.name} onChange={(event) => updateVariant(index, { name: event.target.value })} className={inputClass} /></label><label><span className={labelClass}>SKU</span><input required value={variant.sku} onChange={(event) => updateVariant(index, { sku: event.target.value.toUpperCase().replace(/\s+/g, '-') })} className={inputClass} /></label><label><span className={labelClass}>Thời hạn</span><input value={variant.duration_label || ''} onChange={(event) => updateVariant(index, { duration_label: event.target.value })} placeholder="1 tháng" className={inputClass} /></label></div>
                   <label className="mt-3 block"><span className={labelClass}>Quyền lợi / mô tả gói</span><input value={variant.short_description} onChange={(event) => updateVariant(index, { short_description: event.target.value })} placeholder="Dùng trên 1 thiết bị, cập nhật trong 30 ngày..." className={inputClass} /></label>
-                  <div className="mt-3 grid gap-3 md:grid-cols-4"><label><span className={labelClass}>Giá bán</span><input type="number" min="0" value={variant.price} onChange={(event) => updateVariant(index, { price: Number(event.target.value) })} className={inputClass} /></label><label><span className={labelClass}>Giá so sánh</span><input type="number" min="0" value={variant.compare_at_price || ''} onChange={(event) => updateVariant(index, { compare_at_price: event.target.value ? Number(event.target.value) : null })} className={inputClass} /></label><label><span className={labelClass}>Kiểu kho</span><select value={variant.inventory_policy} onChange={(event) => updateVariant(index, { inventory_policy: event.target.value as 'finite' | 'unlimited' })} className={inputClass}><option value="finite">Hữu hạn</option><option value="unlimited">Không giới hạn</option></select></label><label><span className={labelClass}>{draft.has_key ? 'Kho = key sẵn sàng' : 'Số lượng tồn'}</span><input type="number" min="0" disabled={draft.has_key || variant.inventory_policy === 'unlimited'} value={draft.has_key ? variant.available_keys || 0 : variant.stock_quantity} onChange={(event) => updateVariant(index, { stock_quantity: Number(event.target.value) })} className={`${inputClass} disabled:bg-slate-100 disabled:text-slate-400`} /></label></div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-4"><label><span className={labelClass}>Giá bán</span><input type="number" min="0" value={variant.price} onChange={(event) => updateVariant(index, { price: Number(event.target.value) })} className={inputClass} /></label><label><span className={labelClass}>Giá so sánh</span><input type="number" min={variant.price} value={variant.compare_at_price || ''} onChange={(event) => updateVariant(index, { compare_at_price: event.target.value ? Number(event.target.value) : null })} className={inputClass} /></label><label><span className={labelClass}>Kiểu kho</span><select value={variant.inventory_policy} onChange={(event) => updateVariant(index, { inventory_policy: event.target.value as 'finite' | 'unlimited' })} className={inputClass}><option value="finite">Hữu hạn</option><option value="unlimited">Không giới hạn</option></select></label><label><span className={labelClass}>{draft.has_key ? 'Kho = key sẵn sàng' : 'Số lượng tồn'}</span><input type="number" min="0" disabled={draft.has_key || variant.inventory_policy === 'unlimited'} value={draft.has_key ? variant.available_keys || 0 : variant.stock_quantity} onChange={(event) => updateVariant(index, { stock_quantity: Number(event.target.value) })} className={`${inputClass} disabled:bg-slate-100 disabled:text-slate-400`} /></label></div>
                   <div className="mt-3 grid gap-3 md:grid-cols-3"><label><span className={labelClass}>Giới hạn / đơn</span><input type="number" min="1" max="100" value={variant.purchase_limit} onChange={(event) => updateVariant(index, { purchase_limit: Number(event.target.value) })} className={inputClass} /></label><label><span className={labelClass}>Loại key</span><select disabled={!draft.has_key} value={variant.key_type} onChange={(event) => updateVariant(index, { key_type: event.target.value as 'trial' | 'permanent' })} className={`${inputClass} disabled:bg-slate-100`}><option value="permanent">Trả phí / chính thức</option><option value="trial">Miễn phí / dùng thử</option></select></label><label><span className={labelClass}>Link tải riêng</span><input type="url" value={variant.download_url || ''} onChange={(event) => updateVariant(index, { download_url: event.target.value })} placeholder="https://..." className={inputClass} /></label></div>
                   {draft.has_key && <label className="mt-3 block"><span className={labelClass}>Thêm key mới — mỗi dòng một key</span><textarea value={variant.new_keys_text} onChange={(event) => updateVariant(index, { new_keys_text: event.target.value })} placeholder={'KEY-001\nKEY-002'} className={`${inputClass} min-h-24 py-3 font-mono text-xs`} /><span className="mt-1 block text-[10px] text-slate-400">{variant.new_keys_text.split('\n').filter((value) => value.trim()).length} key mới; key cũ không bị xóa.</span></label>}
                   <div className="mt-3 flex gap-5 text-xs font-semibold text-slate-600"><label className="flex items-center gap-2"><input type="checkbox" checked={variant.is_active} onChange={(event) => updateVariant(index, { is_active: event.target.checked })} className="accent-[#ed4c50]" />Đang bán</label><label className="flex items-center gap-2"><input type="checkbox" checked={variant.is_featured} onChange={(event) => { setVariants((current) => current.map((item, itemIndex) => ({ ...item, is_featured: itemIndex === index ? event.target.checked : false }))); }} className="accent-[#ed4c50]" />Gói đề xuất</label></div>
