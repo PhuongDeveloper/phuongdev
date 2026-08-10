@@ -160,12 +160,12 @@ export default function NavbarClient({
         )}
       >
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-20">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 group">
               {logoUrl ? (
-                <div className="relative h-16 w-[240px] flex items-center">
-                  <Image src={logoUrl} alt="PhuongDev Logo" fill sizes="240px" className="object-contain object-left" />
+                <div className="relative h-20 w-[280px] flex items-center">
+                  <Image src={logoUrl} alt="PhuongDev Logo" fill sizes="280px" className="object-contain object-left scale-110 origin-left" />
                 </div>
               ) : (
                 <>
