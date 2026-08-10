@@ -49,15 +49,6 @@ export default function FeaturedProjects({ projects }: FeaturedProjectsProps) {
     <section className="py-20 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="inline-flex items-center justify-center p-3 bg-rose-50 rounded-2xl mb-6"
-          >
-            <FolderKanban className="w-6 h-6 text-rose-600" />
-          </motion.div>
-
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -65,7 +56,7 @@ export default function FeaturedProjects({ projects }: FeaturedProjectsProps) {
             transition={{ delay: 0.1 }}
             className="text-3xl md:text-4xl font-bold text-slate-900 mb-4"
           >
-            Dự Án Nổi Bật
+            Website Tiện Ích
           </motion.h2>
 
           <motion.p
@@ -75,7 +66,7 @@ export default function FeaturedProjects({ projects }: FeaturedProjectsProps) {
             transition={{ delay: 0.2 }}
             className="text-lg text-slate-600 max-w-2xl mx-auto"
           >
-            Các sản phẩm tâm huyết thể hiện năng lực và kinh nghiệm kỹ thuật.
+            Các công cụ và trang web tiện ích hữu ích giúp tối ưu hóa công việc của bạn.
           </motion.p>
         </div>
 
