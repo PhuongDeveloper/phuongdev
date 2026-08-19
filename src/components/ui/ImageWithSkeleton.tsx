@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Skeleton from './Skeleton';
 
 interface ImageWithSkeletonProps extends React.ImgHTMLAttributes<HTMLImageElement> {
@@ -17,6 +17,13 @@ export default function ImageWithSkeleton({
   ...props
 }: ImageWithSkeletonProps) {
   const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    if (imgRef.current?.complete) {
+      setIsLoaded(true);
+    }
+  }, [src]);
 
   return (
     <div className={`relative ${containerClassName}`}>
@@ -24,6 +31,7 @@ export default function ImageWithSkeleton({
         <Skeleton className={`absolute inset-0 w-full h-full z-10 ${skeletonClassName}`} />
       )}
       <img
+        ref={imgRef}
         src={src}
         alt={alt}
         className={`${className} ${isLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
