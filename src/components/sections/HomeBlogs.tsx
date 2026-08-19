@@ -10,6 +10,7 @@ import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import { type Blog } from '@/lib/types/database';
 import { formatDate, truncateText } from '@/utils/helpers';
+import ImageWithSkeleton from '@/components/ui/ImageWithSkeleton';
 
 interface HomeBlogsProps {
   blogs: Blog[];
@@ -70,9 +71,10 @@ export default function HomeBlogs({ blogs }: HomeBlogsProps) {
                   {/* Ảnh cover */}
                   <div className="relative aspect-video w-full bg-slate-100 overflow-hidden">
                     {blog.cover_image ? (
-                      <img
+                      <ImageWithSkeleton
                         src={blog.cover_image}
                         alt={blog.title}
+                        containerClassName="w-full h-full"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     ) : (

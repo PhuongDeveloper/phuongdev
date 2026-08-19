@@ -10,6 +10,7 @@ import * as LucideIcons from 'lucide-react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import { type Service } from '@/lib/types/database';
+import ImageWithSkeleton from '@/components/ui/ImageWithSkeleton';
 
 interface HomeServicesProps {
   services: Service[];
@@ -80,9 +81,10 @@ export default function HomeServices({ services }: HomeServicesProps) {
                     {/* Ảnh Banner */}
                     <div className="relative h-48 bg-slate-100 overflow-hidden shrink-0">
                       {service.image_url ? (
-                        <img
+                        <ImageWithSkeleton
                           src={service.image_url}
                           alt={service.title}
+                          containerClassName="w-full h-full"
                           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                         />
                       ) : (

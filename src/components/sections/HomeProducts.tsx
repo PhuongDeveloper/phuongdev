@@ -9,6 +9,7 @@ import { ArrowRight, ShoppingCart, Download, Eye } from 'lucide-react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import ImageWithSkeleton from '@/components/ui/ImageWithSkeleton';
 import { type Product } from '@/lib/types/database';
 import { formatCurrency } from '@/utils/helpers';
 
@@ -70,9 +71,10 @@ export default function HomeProducts({ products }: HomeProductsProps) {
                 {/* Ảnh Banner sản phẩm */}
                 <div className="relative aspect-video w-full bg-slate-100 overflow-hidden shrink-0 group">
                   {product.image_url ? (
-                    <img
+                    <ImageWithSkeleton
                       src={product.image_url}
                       alt={product.title}
+                      containerClassName="w-full h-full"
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />
                   ) : (

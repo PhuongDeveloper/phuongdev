@@ -11,6 +11,7 @@ import Card from '@/components/ui/Card';
 import { type Project } from '@/lib/types/database';
 import { truncateText } from '@/utils/helpers';
 import { createClient } from '@/lib/supabase/client';
+import ImageWithSkeleton from '@/components/ui/ImageWithSkeleton';
 
 interface FeaturedProjectsProps {
   projects: Project[];
@@ -91,9 +92,10 @@ export default function FeaturedProjects({ projects }: FeaturedProjectsProps) {
                 {/* Ảnh cover (Nửa trên) */}
                 <div className="w-full aspect-video bg-slate-100 relative overflow-hidden shrink-0">
                   {project.image_url ? (
-                    <img
+                    <ImageWithSkeleton
                       src={project.image_url}
                       alt={project.title}
+                      containerClassName="w-full h-full"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                     />
                   ) : (
