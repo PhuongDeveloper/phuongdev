@@ -20,6 +20,7 @@ type SieuthiCodeResponse = {
 // Lưu thời điểm sync cuối cùng trong memory để tránh gọi API quá nhiều lần (Rate Limit)
 let lastSyncTime = 0;
 let isSyncing = false;
+const MIN_SYNC_INTERVAL_MS = 2000;
 
 async function sendInternalEmail(path: string, body: Record<string, unknown>) {
   const internalSecret = process.env.INTERNAL_API_SECRET;
@@ -34,8 +35,8 @@ async function sendInternalEmail(path: string, body: Record<string, unknown>) {
 
 export async function syncZaloPayTransactions() {
   const now = Date.now();
-  // Giới hạn gọi API tối đa 5 giây 1 lần
-  if (now - lastSyncTime < 5000 || isSyncing) {
+  // Giới hạn gọi API nhưng vẫn cho phép trạng thái mới được nhận gần như tức thời.
+  if (now - lastSyncTime < MIN_SYNC_INTERVAL_MS || isSyncing) {
     return;
   }
   

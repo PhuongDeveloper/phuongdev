@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Coins, Copy, Check, Clock, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import Image from 'next/image';
@@ -35,6 +35,7 @@ export default function WalletModal({ isOpen, onClose, onSuccess }: WalletModalP
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
+  const pollingRef = useRef(false);
 
   // Countdown khi đang ở bước QR
   useEffect(() => {
@@ -50,9 +51,10 @@ export default function WalletModal({ isOpen, onClose, onSuccess }: WalletModalP
     return () => clearInterval(interval);
   }, [step, qrData]);
 
-  // Polling trạng thái giao dịch mỗi 5 giây
+  // Kiểm tra ngay khi mở QR rồi duy trì nhịp 2 giây để cập nhật gần như tức thời.
   const checkStatus = useCallback(async () => {
-    if (!qrData || polling) return;
+    if (!qrData || pollingRef.current) return;
+    pollingRef.current = true;
     setPolling(true);
     try {
       const res = await fetch(`/api/payment/status?transaction_id=${encodeURIComponent(qrData.transaction_id)}`, { cache: 'no-store' });
@@ -64,13 +66,20 @@ export default function WalletModal({ isOpen, onClose, onSuccess }: WalletModalP
         }
       }
     } catch { /* ignore */ }
-    setPolling(false);
-  }, [qrData, polling, onSuccess]);
+    finally {
+      pollingRef.current = false;
+      setPolling(false);
+    }
+  }, [qrData, onSuccess]);
 
   useEffect(() => {
     if (step !== 'qr') return;
-    const interval = setInterval(checkStatus, 5000);
-    return () => clearInterval(interval);
+    const initialCheck = window.setTimeout(() => { void checkStatus(); }, 0);
+    const interval = window.setInterval(checkStatus, 2000);
+    return () => {
+      window.clearTimeout(initialCheck);
+      window.clearInterval(interval);
+    };
   }, [step, checkStatus]);
 
   const handleCreateQR = async () => {

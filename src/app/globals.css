@@ -85,6 +85,20 @@ body {
   }
 }
 
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 140s linear infinite;
+  will-change: transform;
+}
+
+@media (max-width: 767px) {
+  .hero-drum { display: none; }
+}
+
 /* --- Glassmorphism Utility Classes --- */
 .glass {
   background: var(--glass-bg);

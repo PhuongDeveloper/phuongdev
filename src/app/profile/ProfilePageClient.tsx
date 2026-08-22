@@ -10,10 +10,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   User, Wallet, History, ShoppingBag, Copy, Check,
   Coins, Clock, CheckCircle2, Key, RefreshCw,
-  LogOut, TrendingUp, ArrowDownToLine,
+  LogOut, TrendingUp, ArrowDownToLine, Download,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import WalletModal from './WalletModal';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -60,6 +61,12 @@ const paymentMethodLabel: Record<string, string> = {
   free_trial: 'Miễn phí',
 };
 
+function getOrderDownloadUrl(order: Order) {
+  const delivery = Array.isArray(order.delivery_data) ? order.delivery_data : [];
+  const item = delivery.find((entry) => typeof entry.download_url === 'string' && entry.download_url.trim());
+  return typeof item?.download_url === 'string' ? item.download_url : null;
+}
+
 export default function ProfilePageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -87,9 +94,12 @@ export default function ProfilePageClient() {
     setOrders(ordersRes.data || []);
     setTransactions(txRes.data || []);
     setIsLoading(false);
-  }, []);
+  }, [router, supabase]);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => { void loadData(); }, 0);
+    return () => window.clearTimeout(initialLoad);
+  }, [loadData]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -317,12 +327,13 @@ export default function ProfilePageClient() {
                     <div className="text-center py-12">
                       <ShoppingBag className="w-10 h-10 mx-auto mb-3 text-slate-200" />
                       <p className="text-sm text-slate-400">Chưa có đơn hàng nào</p>
-                      <a href="/store" className="mt-2 inline-block text-rose-500 text-sm hover:underline">Khám phá cửa hàng</a>
+                      <Link href="/store" className="mt-2 inline-block text-rose-500 text-sm hover:underline">Khám phá cửa hàng</Link>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {orders.map((order) => {
                         const cfg = orderStatusConfig[order.status] || orderStatusConfig.pending;
+                        const downloadUrl = getOrderDownloadUrl(order);
                         return (
                           <div key={order.id} className="border border-slate-100 rounded-xl p-4 hover:border-slate-200 transition-colors">
                             <div className="flex items-start justify-between flex-wrap gap-2 mb-2">
@@ -347,6 +358,18 @@ export default function ProfilePageClient() {
                                   <CopyButton text={order.key_value} />
                                 </div>
                               </div>
+                            )}
+
+                            {order.status === 'completed' && downloadUrl && (
+                              <a
+                                href={downloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-3 flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-700"
+                              >
+                                <Download className="h-4 w-4" />
+                                Tải xuống sản phẩm
+                              </a>
                             )}
                           </div>
                         );

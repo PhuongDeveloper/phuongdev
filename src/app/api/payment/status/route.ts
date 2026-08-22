@@ -18,18 +18,24 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Chưa đăng nhập.' }, { status: 401 });
 
-  // Đồng bộ giao dịch ZaloPay trước khi kiểm tra DB
-  await syncZaloPayTransactions();
-
   const admin = createAdminClient();
-  const { data: transaction } = await admin
+  const getTransaction = () => admin
     .from('transactions')
     .select('id, user_id, status, amount, coin_amount, purpose, completed_at, expires_at')
     .eq('id', transactionId)
     .eq('user_id', user.id)
     .maybeSingle();
 
+  let { data: transaction } = await getTransaction();
+
   if (!transaction) return NextResponse.json({ error: 'Không tìm thấy giao dịch.' }, { status: 404 });
+
+  // Chỉ gọi API ngân hàng khi giao dịch còn chờ; các giao dịch đã hoàn tất trả về ngay.
+  if (transaction.status === 'pending') {
+    await syncZaloPayTransactions();
+    const refreshed = await getTransaction();
+    if (refreshed.data) transaction = refreshed.data;
+  }
 
   if (
     transaction.status === 'pending' &&

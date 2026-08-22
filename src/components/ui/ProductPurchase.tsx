@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import {
   AlertCircle,
@@ -91,6 +91,7 @@ export default function ProductPurchase({ product, variants }: ProductPurchasePr
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [showLoginHint, setShowLoginHint] = useState(false);
+  const checkingRef = useRef(false);
   const [supabase] = useState(() => createClient());
 
   const selected = availableVariants.find((variant) => variant.id === selectedId) || availableVariants[0];
@@ -131,7 +132,8 @@ export default function ProductPurchase({ product, variants }: ProductPurchasePr
   }, [qrData, status]);
 
   const checkPayment = useCallback(async () => {
-    if (!qrData || checking) return;
+    if (!qrData || checkingRef.current) return;
+    checkingRef.current = true;
     setChecking(true);
     try {
       const response = await fetch(`/api/payment/status?transaction_id=${encodeURIComponent(qrData.transaction_id)}`, { cache: 'no-store' });
@@ -155,14 +157,19 @@ export default function ProductPurchase({ product, variants }: ProductPurchasePr
     } catch {
       // Keep polling. A temporary network error must not cancel the order.
     } finally {
+      checkingRef.current = false;
       setChecking(false);
     }
-  }, [checking, loadProfile, qrData, user]);
+  }, [loadProfile, qrData, user]);
 
   useEffect(() => {
     if (status !== 'qr_pending') return;
-    const timer = window.setInterval(checkPayment, 4000);
-    return () => window.clearInterval(timer);
+    const initialCheck = window.setTimeout(() => { void checkPayment(); }, 0);
+    const timer = window.setInterval(checkPayment, 2000);
+    return () => {
+      window.clearTimeout(initialCheck);
+      window.clearInterval(timer);
+    };
   }, [checkPayment, status]);
 
   const selectVariant = (id: string) => {
@@ -373,7 +380,7 @@ export default function ProductPurchase({ product, variants }: ProductPurchasePr
           <div className="mb-3 flex items-center justify-between">
             <div>
               <p className="text-sm font-bold">Quét QR để thanh toán</p>
-              <p className="mt-0.5 text-[11px] text-slate-400">Hệ thống tự đối soát mỗi 4 giây</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">Hệ thống tự đối soát mỗi 2 giây</p>
             </div>
             <span className={cn('flex items-center gap-1.5 font-mono text-xs font-bold', countdown < 120 ? 'text-red-600' : 'text-slate-500')}>
               <Clock3 className="h-3.5 w-3.5" />{String(Math.floor(countdown / 60)).padStart(2, '0')}:{String(countdown % 60).padStart(2, '0')}
