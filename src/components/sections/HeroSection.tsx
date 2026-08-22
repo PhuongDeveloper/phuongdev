@@ -24,19 +24,21 @@ export default function HeroSection({ siteConfig }: HeroSectionProps) {
           <div className="w-[600px] h-[600px] rounded-full bg-rose-100/50 blur-3xl opacity-50" />
         </div>
         
-        {/* Hiệu ứng Trống Đồng quay tròn */}
+        {/* Trống Đồng gốc đã được raster hóa để giữ nguyên chi tiết mà không bắt trình duyệt vẽ lại SVG nặng mỗi khung hình. */}
         <div
           className="hero-drum absolute z-0 opacity-10 pointer-events-none animate-spin-slow"
           aria-hidden="true"
         >
           <Image
-            src="/trongdong-lite.svg"
+            src="/trongdong.webp"
             alt=""
-            width={1200}
-            height={1200}
+            width={900}
+            height={900}
+            sizes="(max-width: 767px) 0px, 900px"
+            quality={78}
             loading="lazy"
             decoding="async"
-            className="w-[800px] h-[800px] md:w-[1200px] md:h-[1200px] max-w-none" 
+            className="w-[800px] h-[800px] md:w-[1200px] md:h-[1200px] max-w-none"
           />
         </div>
       </div>
