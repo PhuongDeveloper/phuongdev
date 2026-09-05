@@ -36,8 +36,12 @@ interface ScrapedArticle {
   cover_image: string;
   content: string;
   images: string[];
+  tags: string[];
+  reading_time_minutes: number;
   slug: string;
   source_url: string;
+  source_name: string;
+  source_published_at: string | null;
 }
 
 /** Kiểu dữ liệu kết quả quét */
@@ -196,7 +200,11 @@ export default function ScraperClient() {
             excerpt: article.excerpt || null,
             cover_image: article.cover_image || null,
             author: article.author?.trim() || 'PhuongDev',
-            tags: [],
+            tags: article.tags || [],
+            source_url: article.source_url || null,
+            source_name: article.source_name || null,
+            source_published_at: article.source_published_at || null,
+            is_auto_import: false,
             is_published: false,
             published_at: null,
           },
@@ -468,6 +476,8 @@ export default function ScraperClient() {
                       </p>
                       <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
                         <span className="truncate max-w-[180px]">Tác giả: {r.data.author || 'PhuongDev'}</span>
+                        <span>{r.data.reading_time_minutes || 1} phút đọc</span>
+                        {r.data.tags?.length > 0 && <span className="truncate max-w-[180px]">{r.data.tags.slice(0, 3).join(' · ')}</span>}
                         <span className="flex items-center gap-1">
                           <FileText className="w-3 h-3" />
                           {r.data.content.length.toLocaleString()} ký tự

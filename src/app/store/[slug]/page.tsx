@@ -24,6 +24,7 @@ import ViewTracker from '@/components/ui/ViewTracker';
 import { createClient } from '@/lib/supabase/server';
 import type { Product, ProductVariant } from '@/lib/types/database';
 import { normalizeLegacyProduct } from '@/lib/store/legacy-product';
+import { absoluteUrl } from '@/lib/site-url';
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -34,13 +35,18 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     .from('products')
     .select('title, description, image_url')
     .eq('slug', slug)
+    .eq('is_active', true)
     .maybeSingle();
 
   if (!product) return { title: 'Không tìm thấy sản phẩm' };
+  const canonical = `/store/${encodeURIComponent(slug)}`;
+  const description = makeSeoDescription(product.description, product.title);
   return {
-    title: `${product.title} | PhuongDev Market`,
-    description: product.description,
-    openGraph: { images: product.image_url ? [product.image_url] : [] },
+    title: product.title,
+    description,
+    alternates: { canonical },
+    openGraph: { type: 'website', url: canonical, title: product.title, description, images: product.image_url ? [product.image_url] : [] },
+    twitter: { card: 'summary_large_image', title: product.title, description, images: product.image_url ? [product.image_url] : [] },
   };
 }
 
@@ -75,9 +81,38 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const minimumPrice = priceValues.length ? Math.min(...priceValues) : Number(product.price);
   const siteConfig: Record<string, string> = {};
   configRows?.forEach((row) => { siteConfig[row.key] = row.value; });
+  const productStructuredData = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.title,
+    description: product.description,
+    image: [product.image_url, ...(product.gallery_images || [])].filter(Boolean),
+    brand: { '@type': 'Brand', name: 'PhuongDev' },
+    category: product.category,
+    offers: variants.length > 0
+      ? variants.map((variant) => ({
+        '@type': 'Offer',
+        name: variant.name,
+        sku: variant.sku,
+        url: absoluteUrl(`/store/${encodeURIComponent(product.slug)}`),
+        priceCurrency: 'VND',
+        price: Number(variant.price),
+        availability: variant.inventory_policy === 'unlimited' || variant.stock_quantity > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+        itemCondition: 'https://schema.org/NewCondition',
+      }))
+      : [{
+        '@type': 'Offer',
+        url: absoluteUrl(`/store/${encodeURIComponent(product.slug)}`),
+        priceCurrency: 'VND',
+        price: minimumPrice,
+        availability: isAvailable ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+        itemCondition: 'https://schema.org/NewCondition',
+      }],
+  }).replace(/</g, '\\u003c');
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: productStructuredData }} />
       <ViewTracker table="products" slug={product.slug} />
       <Navbar siteConfig={siteConfig} />
 
@@ -189,4 +224,11 @@ export default async function ProductDetailPage({ params }: PageProps) {
       <Footer siteConfig={siteConfig} />
     </div>
   );
+}
+
+function makeSeoDescription(description: string, title: string): string {
+  const text = (description || title).replace(/\s+/g, ' ').trim();
+  if (text.length <= 165) return text;
+  const breakAt = text.slice(0, 164).lastIndexOf(' ');
+  return `${text.slice(0, breakAt > 80 ? breakAt : 164).trim()}…`;
 }

@@ -121,6 +121,10 @@ export interface Blog {
   cover_image: string | null;
   author: string;
   tags: string[];
+  source_url: string | null;
+  source_name: string | null;
+  source_published_at: string | null;
+  is_auto_import: boolean;
   is_published: boolean;
   published_at: string | null;
   views: number;
@@ -138,6 +142,21 @@ export interface Community {
   button_text: string;
   is_active: boolean;
   sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Nguồn RSS dùng cho hệ thống tự nhập/tự đăng bài. */
+export interface NewsSource {
+  id: string;
+  name: string;
+  feed_url: string;
+  default_tags: string[];
+  limit_per_run: number;
+  is_active: boolean;
+  auto_publish: boolean;
+  last_synced_at: string | null;
+  last_error: string | null;
   created_at: string;
   updated_at: string;
 }

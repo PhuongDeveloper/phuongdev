@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Calendar, User, ArrowRight } from 'lucide-react';
@@ -6,9 +7,17 @@ import { formatDate } from '@/utils/helpers';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 
-export const metadata = {
-  title: 'Blog Công Nghệ | PhuongDev',
-  description: 'Chia sẻ kiến thức, kinh nghiệm lập trình và công nghệ mới nhất.',
+export const metadata: Metadata = {
+  title: 'Blog Công Nghệ',
+  description: 'Kiến thức thực chiến, tin công nghệ và giải pháp phần mềm giúp bạn chọn đúng tool, source code và dịch vụ phát triển.',
+  alternates: { canonical: '/blog' },
+  openGraph: {
+    type: 'website',
+    url: '/blog',
+    title: 'Blog Công Nghệ | PhuongDev',
+    description: 'Kiến thức thực chiến, tin công nghệ và giải pháp phần mềm từ PhuongDev.',
+  },
+  twitter: { card: 'summary_large_image', title: 'Blog Công Nghệ | PhuongDev', description: 'Kiến thức thực chiến, tin công nghệ và giải pháp phần mềm từ PhuongDev.' },
 };
 
 export default async function BlogPage() {

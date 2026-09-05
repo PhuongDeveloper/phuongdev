@@ -10,6 +10,9 @@ import ProductsList from './ProductsList';
 export const metadata: Metadata = {
   title: 'Chợ Sản Phẩm Số',
   description: 'Tool, source code và tài nguyên số từ PhuongDev với nhiều gói bản quyền và giao hàng tự động.',
+  alternates: { canonical: '/store' },
+  openGraph: { type: 'website', url: '/store', title: 'Chợ Sản Phẩm Số | PhuongDev', description: 'Tool, source code và tài nguyên số với nhiều gói bản quyền và giao hàng tự động.' },
+  twitter: { card: 'summary_large_image', title: 'Chợ Sản Phẩm Số | PhuongDev', description: 'Tool, source code và tài nguyên số với nhiều gói bản quyền và giao hàng tự động.' },
 };
 
 export default async function StorePage() {

@@ -3,7 +3,6 @@
    ========================================================================== */
 
 import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
 import BlogsClient from './BlogsClient';
 
 export default async function AdminBlogsPage() {
@@ -19,5 +18,6 @@ export default async function AdminBlogsPage() {
     console.error('Lỗi khi tải blogs:', error);
   }
 
-  return <BlogsClient initialBlogs={blogs || []} />;
+  const initialBlogs = blogs || [];
+  return <BlogsClient key={initialBlogs.map((blog) => `${blog.id}:${blog.updated_at}`).join('|')} initialBlogs={initialBlogs} />;
 }

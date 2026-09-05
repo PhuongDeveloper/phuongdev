@@ -4,10 +4,10 @@
 
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Edit2, Trash2, X, Save, Image as ImageIcon, Globe } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save, Image as ImageIcon, Globe, Rss } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import FormInput from '@/components/ui/FormInput';
@@ -31,6 +31,10 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
     cover_image: '',
     author: 'PhuongDev',
     tags: [],
+    source_url: null,
+    source_name: null,
+    source_published_at: null,
+    is_auto_import: false,
     is_published: false,
     published_at: null,
   });
@@ -43,10 +47,6 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
   const supabase = createClient();
   const router = useRouter();
 
-  useEffect(() => {
-    setBlogs(initialBlogs);
-  }, [initialBlogs]);
-
   // Mở modal thêm mới
   const handleAddNew = () => {
     setEditingId(null);
@@ -58,6 +58,10 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
       cover_image: '',
       author: 'PhuongDev',
       tags: [],
+      source_url: null,
+      source_name: null,
+      source_published_at: null,
+      is_auto_import: false,
       is_published: false,
       published_at: null,
     });
@@ -76,6 +80,10 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
       cover_image: blog.cover_image || '',
       author: blog.author,
       tags: blog.tags,
+      source_url: blog.source_url,
+      source_name: blog.source_name,
+      source_published_at: blog.source_published_at,
+      is_auto_import: blog.is_auto_import,
       is_published: blog.is_published,
       published_at: blog.published_at,
     });
@@ -91,9 +99,9 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
       if (error) throw error;
       setBlogs(blogs.filter((b) => b.id !== id));
       alert('Đã xoá bài viết thành công!');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      alert('Lỗi khi xoá: ' + error.message);
+      alert('Lỗi khi xoá: ' + getErrorMessage(error));
     }
   };
 
@@ -144,8 +152,8 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
       } else {
         setFormData({ ...formData, content: formData.content + markdownImage });
       }
-    } catch (error: any) {
-      alert('Lỗi upload ảnh: ' + error.message);
+    } catch (error: unknown) {
+      alert('Lỗi upload ảnh: ' + getErrorMessage(error));
     } finally {
       setIsUploadingInline(false);
       if (inlineFileInputRef.current) inlineFileInputRef.current.value = '';
@@ -191,9 +199,9 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
         alert('Thêm bài viết mới thành công!');
       }
       setIsModalOpen(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      alert('Lỗi lưu dữ liệu: ' + error.message);
+      alert('Lỗi lưu dữ liệu: ' + getErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -207,6 +215,10 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
           <p className="text-slate-600">Thêm, sửa, xoá bài viết công nghệ.</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push('/admin/blogs/automation')}>
+            <Rss className="w-5 h-5 mr-2" />
+            Tự Động Đăng
+          </Button>
           <Button variant="outline" onClick={() => router.push('/admin/blogs/scraper')}>
             <Globe className="w-5 h-5 mr-2" />
             Quét Bài Báo
@@ -399,4 +411,8 @@ export default function BlogsClient({ initialBlogs }: BlogsClientProps) {
       )}
     </div>
   );
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định.';
 }

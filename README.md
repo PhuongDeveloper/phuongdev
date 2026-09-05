@@ -29,6 +29,14 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Tự động nhập và đăng bài từ RSS
+
+1. Chạy migration `supabase/migrations/014_content_growth_automation.sql` trong Supabase SQL Editor.
+2. Thêm biến môi trường `CRON_SECRET` (chuỗi ngẫu nhiên tối thiểu 16 ký tự) và `NEXT_PUBLIC_SITE_URL=https://phuongdev.io.vn` trên Vercel.
+3. Vào **Admin → Blog → Tự Động Đăng**, thêm URL RSS/Atom của nguồn được phép sử dụng và chọn **Lưu nháp** hoặc **Đăng ngay**.
+
+Cron được khai báo tại `vercel.json`, mặc định quét lúc 02:00 UTC (09:00 giờ Việt Nam) mỗi ngày. Có thể bấm **Đồng bộ ngay** trong admin để kiểm tra nguồn mà không cần chờ cron.
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
