@@ -19,7 +19,6 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  Globe,
   FileText,
   Image as ImageIcon,
   ExternalLink,
@@ -33,6 +32,7 @@ import {
 interface ScrapedArticle {
   title: string;
   excerpt: string;
+  author: string;
   cover_image: string;
   content: string;
   images: string[];
@@ -121,11 +121,11 @@ export default function ScraperClient() {
             data: json.data,
           };
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         finalResults[i] = {
           ...finalResults[i],
           status: 'error',
-          error: err.message || 'Lỗi kết nối',
+          error: err instanceof Error ? err.message : 'Lỗi kết nối',
         };
       }
 
@@ -195,7 +195,7 @@ export default function ScraperClient() {
             content: article.content,
             excerpt: article.excerpt || null,
             cover_image: article.cover_image || null,
-            author: 'PhuongDev',
+            author: article.author?.trim() || 'PhuongDev',
             tags: [],
             is_published: false,
             published_at: null,
@@ -204,7 +204,7 @@ export default function ScraperClient() {
 
         if (error) throw error;
         savedCount++;
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Lỗi lưu bài viết:', err);
         failedCount++;
       }
@@ -467,6 +467,7 @@ export default function ScraperClient() {
                         {r.data.excerpt || 'Không có mô tả'}
                       </p>
                       <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
+                        <span className="truncate max-w-[180px]">Tác giả: {r.data.author || 'PhuongDev'}</span>
                         <span className="flex items-center gap-1">
                           <FileText className="w-3 h-3" />
                           {r.data.content.length.toLocaleString()} ký tự

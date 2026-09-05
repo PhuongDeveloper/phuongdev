@@ -79,6 +79,11 @@ export async function POST(request: NextRequest) {
       $('meta[name="twitter:image"]').attr('content') ||
       '';
 
+    // Tác giả thường không nằm ở một selector cố định giữa các trang báo.
+    // Ưu tiên JSON-LD/meta rồi mới dò phần giao diện để tránh lấy nhầm ngày đăng,
+    // tên chuyên mục hoặc chữ "Tác giả" thay cho tên thật.
+    const author = extractAuthor($) || 'PhuongDev';
+
     // Nội dung chính
     const content = extractArticleContent($, articleUrl.href);
 
@@ -93,6 +98,7 @@ export async function POST(request: NextRequest) {
       data: {
         title: cleanText(title),
         excerpt: cleanText(excerpt),
+        author,
         cover_image: resolveUrl(coverImage, articleUrl.href),
         content,
         images,
@@ -242,6 +248,99 @@ function extractImages($: cheerio.CheerioAPI, baseUrl: string): string[] {
     }
   });
   return [...new Set(images)].slice(0, 20);
+}
+
+/** Trích xuất tên tác giả từ JSON-LD, meta tags và các selector phổ biến. */
+function extractAuthor($: cheerio.CheerioAPI): string {
+  const jsonLdAuthors: string[] = [];
+
+  const collectJsonLdAuthors = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(collectJsonLdAuthors);
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+
+    const record = value as Record<string, unknown>;
+    if ('author' in record) {
+      const author = normalizeAuthorValue(record.author);
+      if (author) jsonLdAuthors.push(author);
+    }
+
+    // Một số báo bọc Article trong @graph hoặc @value.
+    Object.entries(record).forEach(([key, nested]) => {
+      if (key === 'author') return;
+      if (key === '@graph' || key === 'mainEntity' || key === 'mainEntityOfPage' || key === '@value') {
+        collectJsonLdAuthors(nested);
+      }
+    });
+  };
+
+  $('script[type="application/ld+json"]').each((_, element) => {
+    const raw = $(element).contents().text().trim();
+    if (!raw) return;
+    try {
+      collectJsonLdAuthors(JSON.parse(raw.replace(/^<!--[\s\S]*?-->/, '').trim()));
+    } catch {
+      // JSON-LD lỗi không được làm hỏng toàn bộ quá trình cào; dùng meta/DOM bên dưới.
+    }
+  });
+
+  const fromJsonLd = jsonLdAuthors.map(normalizeAuthorText).find(Boolean);
+  if (fromJsonLd) return fromJsonLd;
+
+  const metaNames = new Set(['author', 'article:author', 'byl', 'parsely-author', 'dc.creator', 'dcterms.creator']);
+  const metaAuthors: string[] = [];
+  $('meta').each((_, element) => {
+    const key = String($(element).attr('name') || $(element).attr('property') || $(element).attr('itemprop') || '').toLowerCase().trim();
+    if (!metaNames.has(key)) return;
+    const value = $(element).attr('content') || '';
+    const normalized = normalizeAuthorText(value);
+    if (normalized) metaAuthors.push(normalized);
+  });
+  if (metaAuthors[0]) return metaAuthors[0];
+
+  const authorSelectors = [
+    '[rel="author"]', '[itemprop="author"]',
+    '.author-name', '.author__name', '.author', '.article-author', '.post-author',
+    '.author-info', '.byline', '.article__author', '.post__author', '.detail-author',
+  ];
+  for (const selector of authorSelectors) {
+    const elements = $(selector);
+    for (let index = 0; index < elements.length; index += 1) {
+      const element = elements.eq(index);
+      const value = element.attr('content') || element.attr('title') || element.text();
+      const normalized = normalizeAuthorText(value);
+      if (normalized) return normalized;
+    }
+  }
+
+  return '';
+}
+
+function normalizeAuthorValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value.map(normalizeAuthorValue).find(Boolean) || '';
+  }
+  if (!value || typeof value !== 'object') return '';
+  const record = value as Record<string, unknown>;
+  if (typeof record.name === 'string') return record.name;
+  const givenName = typeof record.givenName === 'string' ? record.givenName : '';
+  const familyName = typeof record.familyName === 'string' ? record.familyName : '';
+  return `${givenName} ${familyName}`.trim();
+}
+
+function normalizeAuthorText(value: string): string {
+  const text = cleanText(value)
+    .replace(/\s+/g, ' ')
+    .replace(/^[|·•\-–—]+|[|·•\-–—]+$/g, '')
+    .trim();
+  if (!text || /^https?:\/\//i.test(text) || text.length > 120) return '';
+
+  const withoutLabel = text.replace(/^(?:tác\s*giả|author|by|viết\s*bởi|written\s+by|theo)\s*[:\-–—]?\s*/i, '').trim();
+  if (!withoutLabel || /^(?:tác\s*giả|author|by|admin|unknown|n\/a)$/i.test(withoutLabel)) return '';
+  return withoutLabel.slice(0, 120);
 }
 
 /** Resolve URL tương đối thành URL tuyệt đối */
