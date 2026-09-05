@@ -21,6 +21,29 @@ type SieuthiCodeResponse = {
 let lastSyncTime = 0;
 let isSyncing = false;
 const MIN_SYNC_INTERVAL_MS = 2000;
+let lastCleanupTime = 0;
+let isCleaningUp = false;
+const PAYMENT_EVENT_RETENTION_MS = 5 * 60 * 60 * 1000;
+
+/** Xóa các webhook lỗi cũ; sự kiện đã khớp vẫn được giữ để đối soát lịch sử. */
+export async function cleanupStalePaymentEvents() {
+  const now = Date.now();
+  if (isCleaningUp || now - lastCleanupTime < 10 * 60 * 1000) return;
+  isCleaningUp = true;
+  lastCleanupTime = now;
+  try {
+    const cutoff = new Date(now - PAYMENT_EVENT_RETENTION_MS).toISOString();
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from('payment_events')
+      .delete()
+      .in('status', ['rejected', 'unmatched'])
+      .lt('created_at', cutoff);
+    if (error) console.error('[ZaloPay] Cleanup payment events failed:', error);
+  } finally {
+    isCleaningUp = false;
+  }
+}
 
 async function sendInternalEmail(path: string, body: Record<string, unknown>) {
   const internalSecret = process.env.INTERNAL_API_SECRET;
@@ -44,6 +67,7 @@ export async function syncZaloPayTransactions() {
   lastSyncTime = now;
 
   try {
+    await cleanupStalePaymentEvents();
     const apiUrl = process.env.ZALOPAY_API_URL || 'https://sieuthicode.com/historyapizalopayv3/PZCE43-TD7PVE-P416-9516-QFS7';
     const response = await fetch(apiUrl, { cache: 'no-store' });
     

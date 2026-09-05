@@ -44,6 +44,7 @@ function sanitizeProduct(input: Record<string, unknown>, variants: VariantPayloa
   value.gallery_images = Array.isArray(input.gallery_images)
     ? input.gallery_images.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())).map((item) => item.trim())
     : [];
+  value.sort_order = Math.max(0, Math.round(Number(input.sort_order) || 0));
   return value;
 }
 

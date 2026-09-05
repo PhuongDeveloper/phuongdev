@@ -7,19 +7,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
+import type { AnyNode } from 'domhandler';
+import { getAdminSession } from '@/lib/auth/admin';
 
 export async function POST(request: NextRequest) {
   try {
-    // Kiểm tra xác thực
-    const adminAuthCookie = request.cookies.get('admin_auth');
-    if (adminAuthCookie?.value !== 'phuongdev') {
+    // Dùng cùng phiên Supabase với toàn bộ khu vực admin. Cookie admin_auth cũ
+    // không còn tồn tại sau khi chuyển sang xác thực theo user_profiles.is_admin.
+    const adminSession = await getAdminSession();
+    if (!adminSession) {
       return NextResponse.json(
         { error: 'Chưa xác thực. Vui lòng đăng nhập.' },
         { status: 401 }
       );
     }
 
-    const { url } = await request.json();
+    const { url } = (await request.json()) as { url?: unknown };
     if (!url || typeof url !== 'string') {
       return NextResponse.json(
         { error: 'URL không hợp lệ.' },
@@ -27,8 +30,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let articleUrl: URL;
+    try {
+      articleUrl = new URL(url);
+      if (!['http:', 'https:'].includes(articleUrl.protocol)) throw new Error('unsupported protocol');
+    } catch {
+      return NextResponse.json({ error: 'URL không hợp lệ.' }, { status: 400 });
+    }
+
     // Fetch HTML từ trang báo
-    const response = await fetch(url, {
+    const response = await fetch(articleUrl, {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -69,30 +80,31 @@ export async function POST(request: NextRequest) {
       '';
 
     // Nội dung chính
-    const content = extractArticleContent($, url);
+    const content = extractArticleContent($, articleUrl.href);
 
     // Ảnh trong bài
-    const images = extractImages($, url);
+    const images = extractImages($, articleUrl.href);
 
     // Slug từ URL
-    const slug = generateSlug(url, title);
+    const slug = generateSlug(articleUrl.href, title);
 
     return NextResponse.json({
       success: true,
       data: {
         title: cleanText(title),
         excerpt: cleanText(excerpt),
-        cover_image: resolveUrl(coverImage, url),
+        cover_image: resolveUrl(coverImage, articleUrl.href),
         content,
         images,
         slug,
-        source_url: url,
+        source_url: articleUrl.href,
       },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Lỗi scrape:', error);
+    const message = error instanceof Error ? error.message : 'Lỗi không xác định khi quét bài viết.';
     return NextResponse.json(
-      { error: error.message || 'Lỗi không xác định khi quét bài viết.' },
+      { error: message },
       { status: 500 }
     );
   }
@@ -102,13 +114,14 @@ export async function POST(request: NextRequest) {
 
 /** Trích xuất nội dung bài viết chính */
 function extractArticleContent($: cheerio.CheerioAPI, baseUrl: string): string {
-  let contentElement: any = $('article').first();
+  let contentElement: cheerio.Cheerio<AnyNode> = $('article').first();
 
   if (!contentElement.length) {
     const selectors = [
       '.article-body', '.article-content', '.post-content', '.entry-content',
       '.content-body', '.detail-content', '.fck_detail', '.main-content',
-      '.singular-body', '.cms-body', '.detail__content', '.article__body', '.story-body'
+      '.singular-body', '.cms-body', '.detail__content', '.article__body', '.story-body',
+      '[itemprop="articleBody"]', 'main'
     ];
     for (const sel of selectors) {
       if ($(sel).length) {
@@ -135,7 +148,7 @@ function extractArticleContent($: cheerio.CheerioAPI, baseUrl: string): string {
     contentElement.find(spamSelectors.join(', ')).remove();
 
     // 2. Cứu ảnh (xử lý Lazy Load) TRƯỚC KHI unwrap thẻ a
-    contentElement.find('img').each((_: any, el: any) => {
+    contentElement.find('img').each((_, el) => {
       // Quét các thuộc tính phổ biến chứa link ảnh thật
       const realSrc = 
         $(el).attr('data-src') || 
@@ -157,7 +170,7 @@ function extractArticleContent($: cheerio.CheerioAPI, baseUrl: string): string {
     });
 
     // 3. Giải quyết liên kết rác và unwrap thẻ <a>
-    contentElement.find('a').each((_: any, el: any) => {
+    contentElement.find('a').each((_, el) => {
       const href = $(el).attr('href') || '';
       const text = $(el).text().toLowerCase().trim();
       
@@ -216,7 +229,7 @@ function extractArticleContent($: cheerio.CheerioAPI, baseUrl: string): string {
 /** Trích xuất tất cả ảnh trong bài */
 function extractImages($: cheerio.CheerioAPI, baseUrl: string): string[] {
   const images: string[] = [];
-  $('img').each((_: any, el: any) => {
+  $('img').each((_, el) => {
     const src = 
       $(el).attr('data-src') || 
       $(el).attr('data-original') || 
@@ -234,14 +247,8 @@ function extractImages($: cheerio.CheerioAPI, baseUrl: string): string[] {
 /** Resolve URL tương đối thành URL tuyệt đối */
 function resolveUrl(src: string, baseUrl: string): string {
   if (!src) return '';
-  if (src.startsWith('http://') || src.startsWith('https://')) return src;
-  if (src.startsWith('//')) return 'https:' + src;
   try {
-    const base = new URL(baseUrl);
-    if (src.startsWith('/')) {
-      return `${base.protocol}//${base.host}${src}`;
-    }
-    return `${base.protocol}//${base.host}/${src}`;
+    return new URL(src, baseUrl).href;
   } catch {
     return src;
   }

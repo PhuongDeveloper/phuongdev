@@ -24,7 +24,7 @@ export default async function HomePage() {
     supabase.from('site_config').select('key, value'),
     supabase.from('projects').select('*').eq('is_featured', true).order('sort_order', { ascending: true }).limit(10),
     supabase.from('services').select('*').order('sort_order', { ascending: true }).limit(3),
-    supabase.from('products').select('id,title,slug,description,price,demo_url,image_url,category,is_active,badge,total_sold,is_featured,sort_order,views,created_at,updated_at').eq('is_active', true).order('sort_order', { ascending: true }).limit(3),
+    supabase.from('products').select('id,title,slug,description,price,demo_url,image_url,category,is_active,badge,total_sold,is_featured,sort_order,views,created_at,updated_at').eq('is_active', true).eq('is_featured', true).order('sort_order', { ascending: true }).order('created_at', { ascending: false }).limit(3),
     supabase.from('blogs').select('*').eq('is_published', true).order('created_at', { ascending: false }).limit(3),
   ]);
 
