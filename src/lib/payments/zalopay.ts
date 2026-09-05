@@ -24,6 +24,13 @@ const MIN_SYNC_INTERVAL_MS = 2000;
 let lastCleanupTime = 0;
 let isCleaningUp = false;
 const PAYMENT_EVENT_RETENTION_MS = 5 * 60 * 60 * 1000;
+let lastRechargeCleanupTime = 0;
+let isCleaningRecharge = false;
+
+/** Mốc thời gian để giới hạn danh sách giao dịch cần duyệt thủ công. */
+export function getRechargeManualReviewCutoff() {
+  return Date.now() - PAYMENT_EVENT_RETENTION_MS;
+}
 
 /** Xóa các webhook lỗi cũ; sự kiện đã khớp vẫn được giữ để đối soát lịch sử. */
 export async function cleanupStalePaymentEvents() {
@@ -42,6 +49,27 @@ export async function cleanupStalePaymentEvents() {
     if (error) console.error('[ZaloPay] Cleanup payment events failed:', error);
   } finally {
     isCleaningUp = false;
+  }
+}
+
+/** Đóng các giao dịch nạp bị bỏ quên quá lâu để không nằm mãi trong hàng chờ. */
+export async function cleanupStaleRechargeTransactions() {
+  const now = Date.now();
+  if (isCleaningRecharge || now - lastRechargeCleanupTime < 10 * 60 * 1000) return;
+  isCleaningRecharge = true;
+  lastRechargeCleanupTime = now;
+  try {
+    const cutoff = new Date(now - PAYMENT_EVENT_RETENTION_MS).toISOString();
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from('transactions')
+      .update({ status: 'expired' })
+      .eq('purpose', 'recharge')
+      .eq('status', 'pending')
+      .lt('created_at', cutoff);
+    if (error) console.error('[ZaloPay] Cleanup stale recharge transactions failed:', error);
+  } finally {
+    isCleaningRecharge = false;
   }
 }
 
@@ -68,6 +96,7 @@ export async function syncZaloPayTransactions() {
 
   try {
     await cleanupStalePaymentEvents();
+    await cleanupStaleRechargeTransactions();
     const apiUrl = process.env.ZALOPAY_API_URL || 'https://sieuthicode.com/historyapizalopayv3/PZCE43-TD7PVE-P416-9516-QFS7';
     const response = await fetch(apiUrl, { cache: 'no-store' });
     

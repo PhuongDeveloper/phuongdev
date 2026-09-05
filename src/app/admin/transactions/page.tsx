@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { AlertTriangle, CheckCircle2, CircleDollarSign, Clock3, Radio } from 'lucide-react';
 
 import { createAdminClient } from '@/lib/supabase/admin';
-import { cleanupStalePaymentEvents } from '@/lib/payments/zalopay';
+import { cleanupStalePaymentEvents, cleanupStaleRechargeTransactions, getRechargeManualReviewCutoff } from '@/lib/payments/zalopay';
 import ManualApproveButton from './ManualApproveButton';
 
 // Admin data depends on the authenticated request and server-only credentials.
@@ -13,6 +13,7 @@ export const metadata: Metadata = { title: 'Đối soát thanh toán | Admin' };
 
 export default async function TransactionsPage() {
   await cleanupStalePaymentEvents();
+  await cleanupStaleRechargeTransactions();
   const admin = createAdminClient();
   const [{ data: transactions }, { data: events }] = await Promise.all([
     admin.from('transactions').select('id, user_id, amount, coin_amount, status, transaction_code, payment_method, purpose, bank_ref, created_at, completed_at').order('created_at', { ascending: false }).limit(150),
@@ -20,7 +21,8 @@ export default async function TransactionsPage() {
   ]);
   const completed = (transactions || []).filter((item) => item.status === 'completed');
   const pending = (transactions || []).filter((item) => item.status === 'pending');
-  const manualCandidates = (transactions || []).filter((item) => item.purpose === 'recharge' && ['pending', 'expired'].includes(item.status));
+  const manualCutoff = getRechargeManualReviewCutoff();
+  const manualCandidates = (transactions || []).filter((item) => item.purpose === 'recharge' && ['pending', 'expired'].includes(item.status) && new Date(item.created_at).getTime() >= manualCutoff);
   const rejected = (events || []).filter((item) => item.status === 'rejected' || item.status === 'unmatched');
   const rechargeTotal = completed.filter((item) => item.purpose === 'recharge').reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
@@ -38,7 +40,7 @@ export default async function TransactionsPage() {
 
       {rejected.length > 0 && <section className="overflow-hidden rounded-2xl border border-red-200 bg-white shadow-sm"><div className="flex items-center gap-3 border-b border-red-100 bg-red-50 px-5 py-4"><AlertTriangle className="h-5 w-5 text-red-600" /><div><p className="text-sm font-black text-red-800">Webhook cần kiểm tra</p><p className="text-xs text-red-600/70">Sai số tiền, sai mã hoặc không tìm thấy giao dịch</p></div></div><div className="divide-y divide-slate-100">{rejected.slice(0, 8).map((event) => <div key={event.id} className="grid gap-2 px-5 py-3.5 text-xs sm:grid-cols-[140px_150px_120px_minmax(0,1fr)]"><code className="font-bold text-slate-700">{event.transaction_code || 'Không có mã'}</code><span className="font-black">{Number(event.transfer_amount).toLocaleString('vi-VN')}đ</span><span className="text-slate-400">SePay #{event.provider_transaction_id}</span><span className="text-red-600">{event.reason || 'Không thể đối soát'}</span></div>)}</div></section>}
 
-      {manualCandidates.length > 0 && <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm"><div className="flex items-center gap-3 border-b border-amber-100 bg-amber-50 px-5 py-4"><Clock3 className="h-5 w-5 text-amber-600" /><div><p className="text-sm font-black text-amber-900">Giao dịch cần kiểm tra thủ công</p><p className="text-xs text-amber-700/70">Nếu API ngân hàng lỗi hoặc QR đã hết hạn, hãy kiểm tra sao kê rồi duyệt.</p></div></div><div className="divide-y divide-slate-100">{manualCandidates.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 text-xs"><div className="min-w-0"><div className="flex items-center gap-2"><code className="font-bold text-slate-700">{item.transaction_code}</code><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${item.status === 'expired' ? 'bg-slate-100 text-slate-500' : 'bg-amber-100 text-amber-700'}`}>{item.status === 'expired' ? 'Đã hết hạn QR' : 'Đang chờ'}</span></div><p className="mt-1 text-slate-400">{Number(item.amount).toLocaleString('vi-VN')}đ · tạo lúc {new Date(item.created_at).toLocaleString('vi-VN')}</p></div><ManualApproveButton transactionId={item.id} /></div>)}</div></section>}
+      {manualCandidates.length > 0 && <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm"><div className="flex items-center gap-3 border-b border-amber-100 bg-amber-50 px-5 py-4"><Clock3 className="h-5 w-5 text-amber-600" /><div><p className="text-sm font-black text-amber-900">Giao dịch cần kiểm tra thủ công</p><p className="text-xs text-amber-700/70">Nếu API ngân hàng lỗi hoặc QR đã hết hạn, hãy kiểm tra sao kê rồi duyệt trong vòng 5 giờ.</p></div></div><div className="divide-y divide-slate-100">{manualCandidates.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 text-xs"><div className="min-w-0"><div className="flex items-center gap-2"><code className="font-bold text-slate-700">{item.transaction_code}</code><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${item.status === 'expired' ? 'bg-slate-100 text-slate-500' : 'bg-amber-100 text-amber-700'}`}>{item.status === 'expired' ? 'Đã hết hạn QR' : 'Đang chờ'}</span></div><p className="mt-1 text-slate-400">{Number(item.amount).toLocaleString('vi-VN')}đ · tạo lúc {new Date(item.created_at).toLocaleString('vi-VN')}</p></div><ManualApproveButton transactionId={item.id} /></div>)}</div></section>}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-100 p-5"><Radio className="h-5 w-5 text-emerald-500" /><div><p className="text-sm font-black">Luồng giao dịch</p><p className="text-xs text-slate-400">150 giao dịch gần nhất</p></div></div>
