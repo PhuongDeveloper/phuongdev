@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
-    '/api/nso-builder/jobs': ['./private/nso-templates/*.jar'],
+    '/api/nso-builder/jobs': ['./private/nso-templates/**/*.jar'],
   },
   images: {
     remotePatterns: [

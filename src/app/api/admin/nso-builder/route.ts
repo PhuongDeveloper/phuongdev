@@ -8,6 +8,7 @@ type VersionInput = {
   name?: string;
   description?: string;
   price?: number;
+  clone_bundle_price?: number;
   is_active?: boolean;
   sort_order?: number;
 };
@@ -15,6 +16,8 @@ type VersionInput = {
 type ConfigPayload = {
   settings?: Record<string, unknown>;
   versions?: VersionInput[];
+  channels?: Array<Record<string, unknown>>;
+  offers?: Array<Record<string, unknown>>;
 };
 
 async function requireAdmin() {
@@ -55,6 +58,7 @@ export async function PATCH(request: NextRequest) {
     name: String(version.name || '').trim(),
     description: String(version.description || '').trim(),
     price: Math.max(0, Math.round(Number(version.price) || 0)),
+    clone_bundle_price: Math.max(0, Math.round(Number(version.clone_bundle_price) || 0)),
     is_active: version.is_active !== false,
     sort_order: index,
   }));
@@ -77,6 +81,53 @@ export async function PATCH(request: NextRequest) {
     if (error) {
       console.error('[NSO Builder Admin] Version update failed', error);
       return NextResponse.json({ error: `Không thể lưu phiên bản ${version.code}.` }, { status: 500 });
+    }
+  }
+
+  for (const channel of payload.channels || []) {
+    const id = String(channel.id || '').trim();
+    const downloadUrl = channel.download_url ? String(channel.download_url).trim() : null;
+    if (!/^(apk|pc|ios)[a-zA-Z0-9._-]{1,24}$/.test(id)) {
+      return NextResponse.json({ error: `Mã kênh ${id || '(trống)'} không hợp lệ.` }, { status: 422 });
+    }
+    if (downloadUrl) {
+      try {
+        const parsed = new URL(downloadUrl);
+        if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('invalid protocol');
+      } catch {
+        return NextResponse.json({ error: `Link tải của ${id} không hợp lệ.` }, { status: 422 });
+      }
+    }
+    if (channel.is_active !== false && !downloadUrl) {
+      return NextResponse.json({ error: `Cần nhập link tải trước khi mở bán ${id}.` }, { status: 422 });
+    }
+    const { error } = await admin.from('nso_platform_channels').update({
+      name: String(channel.name || '').trim(),
+      description: String(channel.description || '').trim(),
+      download_url: downloadUrl,
+      is_active: channel.is_active !== false,
+      sort_order: Math.round(Number(channel.sort_order) || 0),
+    }).eq('id', id);
+    if (error) {
+      console.error('[NSO Builder Admin] Channel update failed', error);
+      return NextResponse.json({ error: `Không thể lưu kênh ${id}.` }, { status: 500 });
+    }
+  }
+
+  for (const offer of payload.offers || []) {
+    const id = String(offer.id || '').trim();
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      return NextResponse.json({ error: 'Mã gói APK/PC/iOS không hợp lệ.' }, { status: 422 });
+    }
+    const { error } = await admin.from('nso_platform_offers').update({
+      name: String(offer.name || '').trim(),
+      price: Math.max(0, Math.round(Number(offer.price) || 0)),
+      is_active: offer.is_active !== false,
+      sort_order: Math.round(Number(offer.sort_order) || 0),
+    }).eq('id', id);
+    if (error) {
+      console.error('[NSO Builder Admin] Offer update failed', error);
+      return NextResponse.json({ error: 'Không thể lưu bảng giá APK/PC/iOS.' }, { status: 500 });
     }
   }
 

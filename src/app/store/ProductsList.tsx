@@ -6,13 +6,18 @@ import Link from 'next/link';
 import { ArrowUpRight, Box, PackageX, Search, ShoppingBag, SlidersHorizontal } from 'lucide-react';
 
 import type { ProductWithVariants } from '@/lib/types/database';
-import type { NsoBuilderSettings, NsoBuildVersion } from '@/lib/types/database';
+import type { NsoBuilderSettings, NsoBuildVersion, NsoPlatformChannel, NsoPlatformOffer } from '@/lib/types/database';
 import NsoBuilderProduct from '@/components/store/NsoBuilderProduct';
 import { cn } from '@/utils/helpers';
 
 type ProductsListProps = {
   products: ProductWithVariants[];
-  nsoBuilder?: { settings: NsoBuilderSettings; versions: NsoBuildVersion[] } | null;
+  nsoBuilder?: {
+    settings: NsoBuilderSettings;
+    versions: NsoBuildVersion[];
+    channels: NsoPlatformChannel[];
+    offers: NsoPlatformOffer[];
+  } | null;
 };
 
 function formatPrice(value: number) {
@@ -35,7 +40,7 @@ export default function ProductsList({ products, nsoBuilder }: ProductsListProps
       return matchCategory && matchQuery;
     });
   }, [category, products, query]);
-  const builderVisible = Boolean(nsoBuilder && nsoBuilder.versions.length > 0
+  const builderVisible = Boolean(nsoBuilder && (nsoBuilder.versions.length > 0 || nsoBuilder.channels.length > 0)
     && (category === 'all' || category === 'Build game')
     && (!query.trim() || `${nsoBuilder.settings.title} ${nsoBuilder.settings.description} Ninja School JAR build game`.toLocaleLowerCase('vi').includes(query.trim().toLocaleLowerCase('vi'))));
   const resultCount = filtered.length + (builderVisible ? 1 : 0);
@@ -74,7 +79,7 @@ export default function ProductsList({ products, nsoBuilder }: ProductsListProps
         </div>
       ) : (
         <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {builderVisible && nsoBuilder && <NsoBuilderProduct settings={nsoBuilder.settings} versions={nsoBuilder.versions} />}
+          {builderVisible && nsoBuilder && <NsoBuilderProduct {...nsoBuilder} />}
           {filtered.map((product) => {
             const variants = (product.product_variants || []).filter((variant) => variant.is_active);
             const prices = variants.map((variant) => Number(variant.price));
@@ -87,11 +92,11 @@ export default function ProductsList({ products, nsoBuilder }: ProductsListProps
               <Link key={product.id} href={`/store/${product.slug}`} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-xl hover:shadow-slate-900/10">
                 <div className="relative aspect-[16/10] overflow-hidden bg-slate-100">
                   {product.image_url && !failedImages.has(product.id) ? (
-                    <Image src={product.image_url} alt={product.title} fill className="object-cover transition duration-700 group-hover:scale-[1.04]" sizes="(max-width: 768px) 100vw, 33vw" onError={() => setFailedImages((current) => new Set(current).add(product.id))} />
+                    <Image src={product.image_url} alt={product.title} fill className="object-contain transition duration-500 group-hover:scale-[1.015]" sizes="(max-width: 768px) 100vw, 33vw" onError={() => setFailedImages((current) => new Set(current).add(product.id))} />
                   ) : (
                     <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_30%_25%,rgba(225,29,72,.20),transparent_32%),linear-gradient(145deg,#fff1f2,#eef2ff)]"><ShoppingBag className="h-10 w-10 text-rose-300" /></div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/10" />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/65 to-transparent" />
                   <div className="absolute left-3 top-3 flex gap-2">
                     <span className="rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-900 backdrop-blur">{product.category}</span>
                     {product.badge && <span className="rounded-full bg-[#ed4c50] px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white">{product.badge}</span>}

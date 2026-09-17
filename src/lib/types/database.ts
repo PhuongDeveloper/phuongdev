@@ -194,6 +194,7 @@ export interface NsoBuildVersion {
   name: string;
   description: string;
   price: number;
+  clone_bundle_price: number;
   template_file?: string;
   is_active: boolean;
   sold_count: number;
@@ -203,6 +204,7 @@ export interface NsoBuildVersion {
 }
 
 export type NsoBuildStatus = 'completed';
+export type NsoBuildOutputKind = 'single' | 'clone_bundle';
 
 /** File JAR đã tạo và bàn giao cho khách hàng. */
 export interface NsoBuildJob {
@@ -213,10 +215,57 @@ export interface NsoBuildJob {
   server_host: string;
   server_port: number;
   price: number;
+  output_kind: NsoBuildOutputKind;
   status: NsoBuildStatus;
   output_name: string | null;
   output_size: number | null;
   built_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type NsoPlatform = 'jar' | 'apk' | 'pc' | 'ios';
+
+/** Một client APK/PC/iOS đã build sẵn và endpoint TXT mà client đọc. */
+export interface NsoPlatformChannel {
+  id: string;
+  platform: Exclude<NsoPlatform, 'jar'>;
+  version_code: string;
+  name: string;
+  description: string;
+  endpoint_slug: string;
+  download_url: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Gói vĩnh viễn hoặc thuê theo ngày của một client build sẵn. */
+export interface NsoPlatformOffer {
+  id: string;
+  channel_id: string;
+  name: string;
+  duration_days: number;
+  price: number;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Một server đang được phân phối qua endpoint TXT. */
+export interface NsoServerAccess {
+  id: string;
+  user_id: string;
+  channel_id: string;
+  server_name: string;
+  server_host: string;
+  server_port: number;
+  status: 'active' | 'revoked';
+  expires_at: string | null;
+  total_paid: number;
+  purchase_count: number;
   created_at: string;
   updated_at: string;
 }

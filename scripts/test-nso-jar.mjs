@@ -45,14 +45,18 @@ function patchServerConstant(classBuffer, replacement) {
 
 function patchJar(buffer, replacement) {
   const zip = new AdmZip(buffer);
+  const entries = [];
+  const previous = [];
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory || !entry.entryName.endsWith('.class')) continue;
     const patched = patchServerConstant(entry.getData(), replacement);
     if (!patched) continue;
     entry.setData(patched.buffer);
-    return { output: zip.toBuffer(), entry: entry.entryName, previous: patched.previous };
+    entries.push(entry.entryName);
+    previous.push(patched.previous);
   }
-  throw new Error('Không tìm thấy cấu hình server trong JAR.');
+  if (!entries.length) throw new Error('Không tìm thấy cấu hình server trong JAR.');
+  return { output: zip.toBuffer(), entries, previous };
 }
 
 const templateDirectory = path.join(process.cwd(), 'private', 'nso-templates');
@@ -62,9 +66,23 @@ for (const version of ['148', '217']) {
   const first = patchJar(template, firstValue);
   const second = patchJar(first.output, `Test ${version}:localhost:14445:0:0`);
 
-  assert.equal(second.previous, firstValue, `JAR ${version} không lưu đúng cấu hình lần đầu`);
+  assert.ok(second.previous.every((value) => value === firstValue), `JAR ${version} không lưu đúng cấu hình lần đầu`);
   assert.ok(first.output.length > 100_000, `JAR ${version} có kích thước bất thường`);
   assert.doesNotThrow(() => new AdmZip(first.output).getEntries());
-  console.log(`OK ${version}: ${first.entry}, ${Math.round(first.output.length / 1024)} KB`);
-}
+  console.log(`OK ${version} x1: ${first.entries.join(', ')}, ${Math.round(first.output.length / 1024)} KB`);
 
+  const bundle = new AdmZip();
+  bundle.addFile(`Test_${version}_x1.jar`, first.output);
+  for (const count of [3, 6, 12, 24]) {
+    const cloneTemplate = await readFile(path.join(templateDirectory, 'clones', `${version}-x${count}.jar`));
+    const clone = patchJar(cloneTemplate, firstValue);
+    assert.equal(clone.entries.length, count, `JAR ${version} x${count} không vá đủ ${count} tab`);
+    assert.doesNotThrow(() => new AdmZip(clone.output).getEntries());
+    bundle.addFile(`Test_${version}_x${count}.jar`, clone.output);
+    console.log(`OK ${version} x${count}: vá ${clone.entries.length} tab, ${Math.round(clone.output.length / 1024)} KB`);
+  }
+  const bundleOutput = bundle.toBuffer();
+  assert.equal(new AdmZip(bundleOutput).getEntries().length, 5, `ZIP ${version} không đủ 5 JAR`);
+  assert.ok(bundleOutput.length < 64 * 1024 * 1024, `ZIP ${version} vượt giới hạn Storage 64 MB`);
+  console.log(`OK ${version} bundle: ${Math.round(bundleOutput.length / 1024 / 1024)} MB`);
+}

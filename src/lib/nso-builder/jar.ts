@@ -6,7 +6,11 @@ import path from 'node:path';
 import AdmZip from 'adm-zip';
 
 const templateDirectory = path.join(process.cwd(), 'private', 'nso-templates');
-const allowedTemplates = new Set(['148.jar', '217.jar']);
+const cloneCounts = [3, 6, 12, 24] as const;
+const allowedTemplates = new Set([
+  '148.jar', '217.jar',
+  ...cloneCounts.flatMap((count) => [`clones/148-x${count}.jar`, `clones/217-x${count}.jar`]),
+]);
 
 type PatchedConstant = { previous: string; buffer: Buffer };
 
@@ -66,21 +70,54 @@ export async function createNsoJar(templateFile: string, serverData: string) {
   if (!templatePath.startsWith(`${templateDirectory}${path.sep}`)) throw new Error('Đường dẫn template không hợp lệ.');
 
   const zip = new AdmZip(await readFile(templatePath));
-  let patchedEntry: string | null = null;
-  let previousValue: string | null = null;
+  const patchedEntries: string[] = [];
+  const previousValues = new Set<string>();
 
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory || !entry.entryName.endsWith('.class')) continue;
     const result = patchServerConstant(entry.getData(), serverData);
     if (!result) continue;
     entry.setData(result.buffer);
-    patchedEntry = entry.entryName;
-    previousValue = result.previous;
-    break;
+    patchedEntries.push(entry.entryName);
+    previousValues.add(result.previous);
   }
 
-  if (!patchedEntry) throw new Error('Không tìm thấy hằng cấu hình server trong JAR mẫu.');
+  if (!patchedEntries.length) throw new Error('Không tìm thấy hằng cấu hình server trong JAR mẫu.');
   const output = zip.toBuffer();
   if (output.length < 100_000) throw new Error('JAR đầu ra có kích thước bất thường.');
-  return { output, patchedEntry, previousValue };
+  return {
+    output,
+    patchedEntry: patchedEntries[0],
+    patchedEntries,
+    previousValue: previousValues.values().next().value as string | undefined,
+    previousValues: [...previousValues],
+  };
+}
+
+export async function createNsoJarBundle(
+  versionCode: string,
+  templateFile: string,
+  serverName: string,
+  serverData: string,
+) {
+  const expectedTemplate = `${versionCode}.jar`;
+  if (templateFile !== expectedTemplate || !['148', '217'].includes(versionCode)) {
+    throw new Error('Template bundle không hợp lệ.');
+  }
+
+  const archive = new AdmZip();
+  const safeServer = safeJarFilePart(serverName);
+  const patchedCounts: Record<string, number> = {};
+  const variants = [1, ...cloneCounts];
+
+  for (const count of variants) {
+    const variantTemplate = count === 1 ? templateFile : `clones/${versionCode}-x${count}.jar`;
+    const result = await createNsoJar(variantTemplate, serverData);
+    patchedCounts[`x${count}`] = result.patchedEntries.length;
+    archive.addFile(`${safeServer}_${versionCode}_x${count}.jar`, result.output);
+  }
+
+  const output = archive.toBuffer();
+  if (output.length < 500_000) throw new Error('Gói JAR đầu ra có kích thước bất thường.');
+  return { output, patchedCounts };
 }
