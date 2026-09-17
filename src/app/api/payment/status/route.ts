@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { fulfillNsoPaymentOrder } from '@/lib/nso-builder/payment';
 import { createClient } from '@/lib/supabase/server';
 import { syncZaloPayTransactions } from '@/lib/payments/zalopay';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const transactionId = request.nextUrl.searchParams.get('transaction_id');
@@ -48,7 +50,14 @@ export async function GET(request: NextRequest) {
 
   let order = null;
   let delivery = null;
+  let fulfillmentError: string | null = null;
   if (transaction.purpose === 'order' && transaction.status === 'completed') {
+    try {
+      await fulfillNsoPaymentOrder(transaction.id);
+    } catch (error) {
+      console.error('[Payment Status] NSO fulfillment failed', error);
+      fulfillmentError = 'Thanh toán đã nhận. Hệ thống đang tạo file, vui lòng kiểm tra lại.';
+    }
     const { data } = await admin
       .from('orders')
       .select('id, status, key_value, delivery_data, product_id, variant_id')
@@ -79,5 +88,6 @@ export async function GET(request: NextRequest) {
     completed_at: transaction.completed_at,
     order,
     delivery,
+    fulfillment_error: fulfillmentError,
   });
 }

@@ -1,4 +1,5 @@
 import { paymentConfig } from './config';
+import { fulfillNsoPaymentOrder } from '@/lib/nso-builder/payment';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
@@ -194,26 +195,43 @@ export async function syncZaloPayTransactions() {
         .eq('provider_transaction_id', providerId);
 
       // 5. Gửi email thông báo
+      let deliveryResult = result;
+      let skipDeliveryEmail = false;
+      if (result.purpose === 'order') {
+        try {
+          const nsoResult = await fulfillNsoPaymentOrder(transaction.id);
+          if (nsoResult) deliveryResult = { ...result, ...nsoResult, purpose: 'order' };
+        } catch (fulfillmentError) {
+          // Tiền đã được xác nhận; không đánh dấu giao dịch lỗi. payment/status
+          // sẽ thử bàn giao lại và email chỉ được gửi khi đã có file/link tải.
+          console.error('[ZaloPay] NSO fulfillment failed', fulfillmentError);
+          skipDeliveryEmail = true;
+        }
+      }
+
       const { data: profile } = await admin
         .from('user_profiles')
         .select('email, display_name, coin_balance')
         .eq('id', result.user_id)
         .single();
 
-      if (profile?.email) {
-        if (result.purpose === 'order') {
+      if (profile?.email && !skipDeliveryEmail) {
+        if (deliveryResult.purpose === 'order') {
+          const downloadUrl = typeof deliveryResult.download_url === 'string' && deliveryResult.download_url.startsWith('/')
+            ? `${paymentConfig.appUrl}${deliveryResult.download_url}`
+            : deliveryResult.download_url;
           await sendInternalEmail('/api/email/send-delivery', {
             email: profile.email,
             display_name: profile.display_name,
-            product_title: result.product_title,
-            variant_name: result.variant_name,
-            key_value: result.key_value,
-            delivery_data: result.delivery_data,
-            download_url: result.download_url,
-            delivery_intro: result.delivery_intro,
-            delivery_note: result.delivery_note,
-            order_id: result.order_id,
-            amount: result.amount,
+            product_title: deliveryResult.product_title,
+            variant_name: deliveryResult.variant_name,
+            key_value: deliveryResult.key_value,
+            delivery_data: deliveryResult.delivery_data,
+            download_url: downloadUrl,
+            delivery_intro: deliveryResult.delivery_intro,
+            delivery_note: deliveryResult.delivery_note,
+            order_id: deliveryResult.order_id,
+            amount: deliveryResult.amount,
             payment_method: 'bank_qr',
           });
         } else {

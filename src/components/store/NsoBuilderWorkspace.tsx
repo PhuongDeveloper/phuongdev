@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, ExternalLink, LoaderCircle, RefreshCcw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
+import { Clock3, Download, ExternalLink, LoaderCircle, QrCode, RefreshCcw, RefreshCw, X } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/client';
 import type { NsoBuilderSettings, NsoBuildJob, NsoBuildVersion, NsoPlatform, NsoPlatformOffer, NsoServerAccess, NsoStoreChannel } from '@/lib/types/database';
@@ -15,6 +16,14 @@ type Props = {
 
 type AccessHistory = NsoServerAccess & {
   channel: Pick<NsoStoreChannel, 'id' | 'platform' | 'version_code' | 'name' | 'download_url'> | null;
+};
+
+type QrData = {
+  qr_url: string;
+  transaction_code: string;
+  transaction_id: string;
+  amount: number;
+  expires_at: string;
 };
 
 const platformMeta = {
@@ -55,6 +64,10 @@ export default function NsoBuilderWorkspace({ settings, versions, channels, offe
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
+  const [qrData, setQrData] = useState<QrData | null>(null);
+  const [countdown, setCountdown] = useState(0);
+  const [checkingPayment, setCheckingPayment] = useState(false);
+  const checkingPaymentRef = useRef(false);
 
   const selectedVersion = activeVersions.find((item) => item.code === selectedCode) || activeVersions[0];
   const platformChannels = activeChannels.filter((item) => item.platform === platform);
@@ -95,11 +108,20 @@ export default function NsoBuilderWorkspace({ settings, versions, channels, offe
     return () => window.clearTimeout(timeout);
   }, [loadBalance, loadHistory]);
 
+  useEffect(() => {
+    if (!qrData) return;
+    const tick = () => setCountdown(Math.max(0, Math.floor((new Date(qrData.expires_at).getTime() - Date.now()) / 1000)));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [qrData]);
+
   const choosePlatform = (next: NsoPlatform) => {
     setPlatform(next);
     setError('');
     setMessage('');
     setDownloadUrl('');
+    setQrData(null);
     if (next === 'jar') return;
     const channel = activeChannels.find((item) => item.platform === next);
     setSelectedChannelId(channel?.id || '');
@@ -149,6 +171,93 @@ export default function NsoBuilderWorkspace({ settings, versions, channels, offe
       setSubmitting(false);
     }
   };
+
+  const startQrPayment = async () => {
+    const form = document.getElementById('nso-builder-form') as HTMLFormElement | null;
+    if (!form?.reportValidity()) return;
+    if (platform === 'jar' && !selectedVersion) return;
+    if (platform !== 'jar' && (!selectedChannel || !selectedOffer)) return;
+    if (selectedPrice <= 0) return;
+
+    setSubmitting(true);
+    setError('');
+    setMessage('');
+    setDownloadUrl('');
+    try {
+      const response = await fetch('/api/nso-builder/payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          purchase_kind: platform === 'jar' ? 'jar' : 'access',
+          ...(platform === 'jar'
+            ? { version_code: selectedVersion?.code, output_kind: cloneBundle ? 'clone_bundle' : 'single' }
+            : { offer_id: selectedOffer?.id }),
+          server_name: serverName,
+          server_host: serverHost,
+          server_port: serverPort,
+          idempotency_key: crypto.randomUUID(),
+        }),
+      });
+      const data = await response.json();
+      if (response.status === 401) {
+        setError('Đăng nhập để tiếp tục.');
+        document.getElementById('navbar-login-btn')?.click();
+        return;
+      }
+      if (!response.ok) throw new Error(data.error || 'Không thể tạo mã QR.');
+      setQrData(data as QrData);
+    } catch (paymentError) {
+      setError(paymentError instanceof Error ? paymentError.message : 'Không thể tạo mã QR.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const checkPayment = useCallback(async () => {
+    if (!qrData || checkingPaymentRef.current) return;
+    checkingPaymentRef.current = true;
+    setCheckingPayment(true);
+    try {
+      const response = await fetch(`/api/payment/status?transaction_id=${encodeURIComponent(qrData.transaction_id)}`, { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Không thể kiểm tra thanh toán.');
+      if (data.status === 'expired') {
+        setQrData(null);
+        setError('Mã QR đã hết hạn. Vui lòng tạo mã mới.');
+        return;
+      }
+      if (data.status !== 'completed') return;
+      if (data.fulfillment_error) {
+        setMessage(data.fulfillment_error);
+        return;
+      }
+      const delivery = Array.isArray(data.order?.delivery_data) ? data.order.delivery_data : [];
+      const deliveredUrl = delivery.find((item: { download_url?: unknown }) => typeof item.download_url === 'string')?.download_url;
+      if (!deliveredUrl) {
+        setMessage('Đã nhận thanh toán, hệ thống đang chuẩn bị file...');
+        return;
+      }
+      setDownloadUrl(String(deliveredUrl));
+      setMessage('Thanh toán thành công. File của bạn đã sẵn sàng.');
+      setQrData(null);
+      await Promise.all([loadHistory(), loadBalance()]);
+    } catch (paymentError) {
+      setError(paymentError instanceof Error ? paymentError.message : 'Không thể kiểm tra thanh toán.');
+    } finally {
+      checkingPaymentRef.current = false;
+      setCheckingPayment(false);
+    }
+  }, [loadBalance, loadHistory, qrData]);
+
+  useEffect(() => {
+    if (!qrData) return;
+    const initial = window.setTimeout(() => { void checkPayment(); }, 0);
+    const timer = window.setInterval(() => { void checkPayment(); }, 2000);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(timer);
+    };
+  }, [checkPayment, qrData]);
 
   const selectionName = platform === 'jar'
     ? `${selectedVersion?.name || 'Ninja School'} · ${cloneBundle ? 'Trọn bộ 5 bản' : 'Bản thường'}`
@@ -229,7 +338,28 @@ export default function NsoBuilderWorkspace({ settings, versions, channels, offe
             {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2.5 text-xs font-bold text-red-600">{error}</p>}
             {message && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2.5 text-xs font-bold text-emerald-700">{message}</p>}
             {downloadUrl ? <a href={downloadUrl} className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-white text-sm font-bold text-rose-600 hover:bg-rose-50"><Download className="h-4 w-4" />Tải xuống</a> : null}
-            <button form="nso-builder-form" disabled={submitting || (platform === 'jar' ? !selectedVersion : !selectedOffer)} className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#ed4c50] text-sm font-bold text-white transition hover:bg-rose-600 disabled:opacity-60">{submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}{submitting ? 'Đang tạo...' : 'Tạo game'}</button>
+            {qrData ? (
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-bold text-slate-700">Quét mã để thanh toán</p>
+                  <span className="flex items-center gap-1 font-mono text-xs text-slate-400"><Clock3 className="h-3.5 w-3.5" />{String(Math.floor(countdown / 60)).padStart(2, '0')}:{String(countdown % 60).padStart(2, '0')}</span>
+                </div>
+                <div className="mx-auto mt-3 w-fit rounded-xl border border-slate-100 bg-white p-2">
+                  <Image src={qrData.qr_url} alt="Mã QR thanh toán" width={190} height={190} className="rounded-lg" />
+                </div>
+                <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2.5 text-center">
+                  <p className="font-mono text-xs font-bold text-slate-700">{qrData.transaction_code}</p>
+                  <p className="mt-1 text-sm font-black text-rose-600">{formatPrice(qrData.amount)}</p>
+                </div>
+                <button type="button" onClick={() => void checkPayment()} className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"><RefreshCw className={`h-3.5 w-3.5 ${checkingPayment ? 'animate-spin' : ''}`} />Kiểm tra thanh toán</button>
+                <button type="button" onClick={() => setQrData(null)} className="mt-1 inline-flex h-9 w-full items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-slate-700"><X className="h-3.5 w-3.5" />Đóng</button>
+              </div>
+            ) : (
+              <>
+                <button form="nso-builder-form" disabled={submitting || (platform === 'jar' ? !selectedVersion : !selectedOffer)} className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#ed4c50] text-sm font-bold text-white transition hover:bg-rose-600 disabled:opacity-60">{submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}{submitting ? 'Đang tạo...' : 'Thanh toán bằng ví'}</button>
+                {selectedPrice > 0 && <button type="button" disabled={submitting} onClick={() => void startQrPayment()} className="mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-700 transition hover:border-rose-200 hover:bg-rose-50 disabled:opacity-60"><QrCode className="h-4 w-4 text-rose-500" />Thanh toán QR</button>}
+              </>
+            )}
           </div>
         </aside>
       </div>

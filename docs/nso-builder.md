@@ -10,9 +10,15 @@ JDK hay quy trình build lại mã nguồn khi khách mua.
    `Tên server:host:port:0:0` ngay trong bộ nhớ.
 3. File hoàn tất được upload vào bucket Supabase riêng tư `nso-builds`.
 4. RPC trong migration `015_nso_jar_builder.sql` khóa ví, kiểm tra giá hiện tại,
-   trừ tiền và ghi lịch sử trong cùng một transaction.
+   trừ tiền và ghi cả lịch sử NSO lẫn đơn hàng cửa hàng trong cùng một transaction.
 5. Khách tải file qua signed URL ngắn hạn. Bản thường là một JAR; bản nhiều tab
    là ZIP giao hàng chứa đủ x1, x3, x6, x12 và x24. Bucket không public.
+
+Khách có thể trả bằng ví hoặc QR trực tiếp. Với QR, hệ thống tạo một đơn hàng
+đang chờ và tự đối soát. Sau khi nhận đúng số tiền, JAR mới được tạo hoặc quyền
+APK/PC/iOS mới được cấp; đơn chuyển sang hoàn thành và link tải xuất hiện trong
+lịch sử mua hàng. Các lượt NSO cũ cũng được migration đưa ngược vào bảng
+`orders`, vì vậy dashboard doanh thu dùng chung một nguồn dữ liệu.
 
 Nếu tạo hoặc upload JAR thất bại, RPC chưa chạy nên khách không bị trừ tiền. Nếu
 giao dịch cơ sở dữ liệu thất bại, API xóa file vừa upload.
