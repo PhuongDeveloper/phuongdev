@@ -5,9 +5,9 @@
 
 CREATE TABLE IF NOT EXISTS nso_builder_settings (
   id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id = TRUE),
-  title TEXT NOT NULL DEFAULT 'Build Ninja School theo server của bạn',
-  description TEXT NOT NULL DEFAULT 'Nhập tên server, địa chỉ kết nối và nhận ngay client JAR được đóng gói riêng.',
-  content TEXT NOT NULL DEFAULT 'Client được tạo tức thì từ bản mẫu đã kiểm thử. Mỗi file chỉ chứa cấu hình server bạn cung cấp.',
+  title TEXT NOT NULL DEFAULT 'Tạo phiên bản Ninja School của bạn',
+  description TEXT NOT NULL DEFAULT 'Chọn phiên bản, nhập server và nhận game ngay.',
+  content TEXT NOT NULL DEFAULT 'Game được chuẩn bị tự động theo server bạn cung cấp.',
   banner_url TEXT,
   badge TEXT NOT NULL DEFAULT 'TẠO TỨC THÌ',
   default_port INTEGER NOT NULL DEFAULT 14444 CHECK (default_port BETWEEN 1 AND 65535),
@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS nso_builder_settings (
 );
 
 INSERT INTO nso_builder_settings (id) VALUES (TRUE) ON CONFLICT (id) DO NOTHING;
+
+UPDATE nso_builder_settings SET
+  title = 'Tạo phiên bản Ninja School của bạn',
+  description = 'Chọn phiên bản, nhập server và nhận game ngay.',
+  content = 'Game được chuẩn bị tự động theo server bạn cung cấp.'
+WHERE id = TRUE AND title = 'Build Ninja School theo server của bạn';
 
 CREATE TABLE IF NOT EXISTS nso_build_versions (
   code TEXT PRIMARY KEY CHECK (code ~ '^[a-zA-Z0-9._-]{1,24}$'),
@@ -215,7 +221,7 @@ GRANT SELECT ON nso_builder_settings TO anon, authenticated;
 GRANT SELECT (code, name, description, price, clone_bundle_price, is_active, sold_count, sort_order, created_at, updated_at)
   ON nso_build_versions TO anon, authenticated;
 GRANT SELECT ON nso_build_jobs TO authenticated;
-GRANT SELECT (id, platform, version_code, name, description, endpoint_slug, download_url, is_active, sort_order, created_at, updated_at)
+GRANT SELECT (id, platform, version_code, name, description, download_url, is_active, sort_order, created_at, updated_at)
   ON nso_platform_channels TO anon, authenticated;
 GRANT SELECT (id, channel_id, name, duration_days, price, is_active, sort_order, created_at, updated_at)
   ON nso_platform_offers TO anon, authenticated;
@@ -341,7 +347,7 @@ BEGIN
     SELECT * INTO v_channel FROM nso_platform_channels WHERE id = v_access.channel_id;
     RETURN jsonb_build_object('success', TRUE, 'duplicate', TRUE, 'access_id', v_access.id,
       'price', v_existing_order.price, 'expires_at', v_access.expires_at,
-      'download_url', v_channel.download_url, 'endpoint_slug', v_channel.endpoint_slug);
+      'download_url', v_channel.download_url);
   END IF;
 
   IF char_length(v_name) < 2 OR char_length(v_name) > 40 OR v_name ~ '[\x00-\x1F\\/:,*?"<>|]' THEN
@@ -422,8 +428,7 @@ BEGIN
 
   RETURN jsonb_build_object('success', TRUE, 'access_id', v_access.id,
     'price', v_offer.price, 'new_balance', v_profile.coin_balance - v_offer.price,
-    'expires_at', v_access.expires_at, 'download_url', v_channel.download_url,
-    'endpoint_slug', v_channel.endpoint_slug);
+    'expires_at', v_access.expires_at, 'download_url', v_channel.download_url);
 END;
 $$;
 

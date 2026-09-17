@@ -37,7 +37,7 @@ export async function GET() {
   const channelIds = Array.from(new Set((accesses || []).map((access) => access.channel_id)));
   const { data: channels } = channelIds.length
     ? await admin.from('nso_platform_channels')
-      .select('id,platform,version_code,name,endpoint_slug,download_url').in('id', channelIds)
+      .select('id,platform,version_code,name,download_url').in('id', channelIds)
     : { data: [] };
   const channelMap = new Map((channels || []).map((channel) => [channel.id, channel]));
   return NextResponse.json({
@@ -93,4 +93,3 @@ export async function POST(request: NextRequest) {
   }
   return NextResponse.json({ ...data, message: 'Server đã được thêm vào bản tải của bạn.' });
 }
-

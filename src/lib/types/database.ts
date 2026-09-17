@@ -241,6 +241,9 @@ export interface NsoPlatformChannel {
   updated_at: string;
 }
 
+/** Dữ liệu kênh an toàn để hiển thị cho khách, không chứa đường dẫn nội bộ. */
+export type NsoStoreChannel = Omit<NsoPlatformChannel, 'endpoint_slug'>;
+
 /** Gói vĩnh viễn hoặc thuê theo ngày của một client build sẵn. */
 export interface NsoPlatformOffer {
   id: string;

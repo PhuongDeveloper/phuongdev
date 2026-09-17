@@ -1,30 +1,30 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Apple, Check, Coins, Download, ExternalLink, FileArchive, History, LoaderCircle, Monitor, PackageOpen, RefreshCcw, Server, Smartphone, Wifi } from 'lucide-react';
+import { Download, ExternalLink, LoaderCircle, RefreshCcw } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/client';
-import type { NsoBuilderSettings, NsoBuildJob, NsoBuildVersion, NsoPlatform, NsoPlatformChannel, NsoPlatformOffer, NsoServerAccess } from '@/lib/types/database';
+import type { NsoBuilderSettings, NsoBuildJob, NsoBuildVersion, NsoPlatform, NsoPlatformOffer, NsoServerAccess, NsoStoreChannel } from '@/lib/types/database';
 
 type Props = {
   settings: NsoBuilderSettings;
   versions: NsoBuildVersion[];
-  channels: NsoPlatformChannel[];
+  channels: NsoStoreChannel[];
   offers: NsoPlatformOffer[];
 };
 
 type AccessHistory = NsoServerAccess & {
-  channel: Pick<NsoPlatformChannel, 'id' | 'platform' | 'version_code' | 'name' | 'download_url'> | null;
+  channel: Pick<NsoStoreChannel, 'id' | 'platform' | 'version_code' | 'name' | 'download_url'> | null;
 };
 
 const platformMeta = {
-  jar: { label: 'JAR', icon: FileArchive },
-  apk: { label: 'APK', icon: Smartphone },
-  pc: { label: 'PC', icon: Monitor },
-  ios: { label: 'iOS', icon: Apple },
-} satisfies Record<NsoPlatform, { label: string; icon: typeof FileArchive }>;
+  jar: { label: 'JAR' },
+  apk: { label: 'APK' },
+  pc: { label: 'PC' },
+  ios: { label: 'iOS' },
+} satisfies Record<NsoPlatform, { label: string }>;
 
-const inputClass = 'mt-1.5 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-300 focus:border-rose-300 focus:ring-4 focus:ring-rose-100';
+const inputClass = 'mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-300 focus:border-rose-400 focus:ring-2 focus:ring-rose-100';
 
 function formatPrice(value: number) {
   return value === 0 ? 'Miễn phí' : `${value.toLocaleString('vi-VN')}đ`;
@@ -106,7 +106,7 @@ export default function NsoBuilderWorkspace({ settings, versions, channels, offe
     setSelectedOfferId(activeOffers.find((offer) => offer.channel_id === channel?.id)?.id || '');
   };
 
-  const chooseChannel = (channel: NsoPlatformChannel) => {
+  const chooseChannel = (channel: NsoStoreChannel) => {
     setSelectedChannelId(channel.id);
     setSelectedOfferId(activeOffers.find((offer) => offer.channel_id === channel.id)?.id || '');
   };
@@ -151,51 +151,47 @@ export default function NsoBuilderWorkspace({ settings, versions, channels, offe
   };
 
   const selectionName = platform === 'jar'
-    ? `${selectedVersion?.name || 'JAR'} · ${cloneBundle ? 'Bộ 5 bản' : 'x1'}`
+    ? `${selectedVersion?.name || 'Ninja School'} · ${cloneBundle ? 'Trọn bộ 5 bản' : 'Bản thường'}`
     : `${selectedChannel?.name || platformMeta[platform].label} · ${selectedOffer?.name || ''}`;
   const historyCount = jobs.length + accesses.length;
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-4 gap-2 rounded-2xl border border-rose-100 bg-white p-2 shadow-sm">
+    <div className="space-y-8">
+      <nav className="flex border-b border-slate-200" aria-label="Nền tảng">
         {(Object.keys(platformMeta) as NsoPlatform[]).map((item) => {
           const meta = platformMeta[item];
-          const Icon = meta.icon;
           const available = availablePlatforms.includes(item);
           return (
-            <button key={item} type="button" disabled={!available} onClick={() => choosePlatform(item)} className={`flex h-14 items-center justify-center gap-2 rounded-xl border text-sm font-black transition ${platform === item ? 'border-rose-300 bg-rose-50 text-rose-600 shadow-sm' : 'border-transparent text-slate-400 hover:bg-rose-50/60 hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-35'}`}>
-              <Icon className="h-4 w-4" />{meta.label}
+            <button key={item} type="button" disabled={!available} onClick={() => choosePlatform(item)} className={`relative min-w-20 px-5 py-3 text-sm font-bold transition ${platform === item ? 'text-rose-600 after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-rose-500' : 'text-slate-400 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-35'}`}>
+              {meta.label}
             </button>
           );
         })}
-      </div>
+      </nav>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <form id="nso-builder-form" onSubmit={submit} className="space-y-7 rounded-3xl border border-rose-100 bg-white p-5 shadow-sm sm:p-7">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <form id="nso-builder-form" onSubmit={submit} className="space-y-7 rounded-2xl border border-slate-200 bg-white p-5 sm:p-7">
           {platform === 'jar' ? (
             <>
               <section>
-                <h2 className="text-sm font-black text-slate-800">Phiên bản JAR</h2>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <h2 className="text-sm font-bold text-slate-800">Phiên bản</h2>
+                <div className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
                   {activeVersions.map((version) => (
-                    <button key={version.code} type="button" onClick={() => setSelectedCode(version.code)} className={`rounded-2xl border p-4 text-left transition ${selectedVersion?.code === version.code ? 'border-rose-300 bg-rose-50 ring-2 ring-rose-100' : 'border-slate-200 hover:border-rose-200'}`}>
-                      <span className="flex items-center justify-between gap-3"><b className="text-sm text-slate-800">{version.name}</b><span className="text-sm font-black text-rose-600">{formatPrice(Number(version.price))}</span></span>
-                      <span className="mt-1 block text-xs text-slate-400">v{version.code}</span>
+                    <button key={version.code} type="button" onClick={() => setSelectedCode(version.code)} className={`flex w-full items-center justify-between gap-4 px-4 py-4 text-left transition ${selectedVersion?.code === version.code ? 'bg-rose-50' : 'hover:bg-slate-50'}`}>
+                      <span className="flex items-center gap-3"><span className={`h-4 w-4 rounded-full border-4 ${selectedVersion?.code === version.code ? 'border-rose-500' : 'border-slate-200'}`} /><b className="text-sm text-slate-800">{version.name}</b></span><span className="text-sm font-bold text-rose-600">{formatPrice(Number(version.price))}</span>
                     </button>
                   ))}
                 </div>
               </section>
 
               <section>
-                <h2 className="text-sm font-black text-slate-800">Gói file</h2>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <button type="button" onClick={() => setCloneBundle(false)} className={`rounded-2xl border p-4 text-left transition ${!cloneBundle ? 'border-rose-300 bg-rose-50 ring-2 ring-rose-100' : 'border-slate-200 hover:border-rose-200'}`}>
-                    <span className="flex items-center justify-between"><b className="text-sm text-slate-800">JAR x1</b>{!cloneBundle && <Check className="h-4 w-4 text-rose-500" />}</span>
-                    <span className="mt-2 block text-xs text-slate-400">Một file, tải ngay</span>
+                <h2 className="text-sm font-bold text-slate-800">Gói</h2>
+                <div className="mt-3 grid grid-cols-2 overflow-hidden rounded-xl border border-slate-200 p-1">
+                  <button type="button" onClick={() => setCloneBundle(false)} className={`rounded-lg px-3 py-3 text-sm font-bold transition ${!cloneBundle ? 'bg-rose-500 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+                    Bản thường
                   </button>
-                  <button type="button" onClick={() => setCloneBundle(true)} className={`rounded-2xl border p-4 text-left transition ${cloneBundle ? 'border-rose-300 bg-rose-50 ring-2 ring-rose-100' : 'border-slate-200 hover:border-rose-200'}`}>
-                    <span className="flex items-center justify-between"><b className="text-sm text-slate-800">Bộ 5 JAR</b><span className="text-xs font-black text-rose-600">+{Number(selectedVersion?.clone_bundle_price || 0).toLocaleString('vi-VN')}đ</span></span>
-                    <span className="mt-3 flex flex-wrap gap-1.5">{[1, 3, 6, 12, 24].map((count) => <span key={count} className="rounded-md border border-rose-200 bg-white px-2 py-1 font-mono text-[10px] font-black text-rose-500">x{count}</span>)}</span>
+                  <button type="button" onClick={() => setCloneBundle(true)} className={`rounded-lg px-3 py-3 text-sm font-bold transition ${cloneBundle ? 'bg-rose-500 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+                    Trọn bộ x1–x24
                   </button>
                 </div>
               </section>
@@ -203,53 +199,50 @@ export default function NsoBuilderWorkspace({ settings, versions, channels, offe
           ) : (
             <>
               <section>
-                <h2 className="text-sm font-black text-slate-800">Phiên bản {platformMeta[platform].label}</h2>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {platformChannels.map((channel) => <button key={channel.id} type="button" onClick={() => chooseChannel(channel)} className={`rounded-2xl border p-4 text-left transition ${selectedChannel?.id === channel.id ? 'border-rose-300 bg-rose-50 ring-2 ring-rose-100' : 'border-slate-200 hover:border-rose-200'}`}><b className="text-sm text-slate-800">{channel.name}</b><span className="mt-1 block font-mono text-[10px] text-slate-400">/{channel.endpoint_slug}</span></button>)}
+                <h2 className="text-sm font-bold text-slate-800">Phiên bản</h2>
+                <div className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
+                  {platformChannels.map((channel) => <button key={channel.id} type="button" onClick={() => chooseChannel(channel)} className={`flex w-full items-center gap-3 px-4 py-4 text-left transition ${selectedChannel?.id === channel.id ? 'bg-rose-50' : 'hover:bg-slate-50'}`}><span className={`h-4 w-4 rounded-full border-4 ${selectedChannel?.id === channel.id ? 'border-rose-500' : 'border-slate-200'}`} /><b className="text-sm text-slate-800">{channel.name}</b></button>)}
                 </div>
               </section>
               <section>
-                <h2 className="text-sm font-black text-slate-800">Thời hạn</h2>
-                <div className="mt-3 flex flex-wrap gap-2">{channelOffers.map((offer) => <button key={offer.id} type="button" onClick={() => setSelectedOfferId(offer.id)} className={`rounded-xl border px-4 py-3 text-left transition ${selectedOffer?.id === offer.id ? 'border-rose-300 bg-rose-50 text-rose-600' : 'border-slate-200 bg-white text-slate-600 hover:border-rose-200'}`}><b className="block text-xs">{offer.name}</b><span className="mt-1 block text-[11px] font-bold">{formatPrice(Number(offer.price))}</span></button>)}</div>
+                <h2 className="text-sm font-bold text-slate-800">Thời hạn</h2>
+                <div className="mt-3 flex flex-wrap gap-2">{channelOffers.map((offer) => <button key={offer.id} type="button" onClick={() => setSelectedOfferId(offer.id)} className={`rounded-lg border px-4 py-2.5 text-sm font-semibold transition ${selectedOffer?.id === offer.id ? 'border-rose-500 bg-rose-500 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-rose-300'}`}>{offer.name} · {formatPrice(Number(offer.price))}</button>)}</div>
               </section>
             </>
           )}
 
-          <section className="border-t border-rose-100 pt-6">
-            <h2 className="text-sm font-black text-slate-800">Thông tin server</h2>
+          <section className="border-t border-slate-100 pt-6">
+            <h2 className="text-sm font-bold text-slate-800">Server</h2>
             <div className="mt-3 grid gap-4 sm:grid-cols-2">
-              <label className="sm:col-span-2"><span className="text-xs font-bold text-slate-500">Tên server</span><div className="relative"><Server className="absolute left-4 top-1/2 mt-0.5 h-4 w-4 -translate-y-1/2 text-rose-300" /><input required minLength={2} maxLength={40} value={serverName} onChange={(event) => setServerName(event.target.value)} placeholder="Ví dụ: NsoX" className={`${inputClass} pl-11`} /></div></label>
-              <label><span className="text-xs font-bold text-slate-500">IP hoặc tên miền</span><div className="relative"><Wifi className="absolute left-4 top-1/2 mt-0.5 h-4 w-4 -translate-y-1/2 text-rose-300" /><input required value={serverHost} onChange={(event) => setServerHost(event.target.value)} placeholder="127.0.0.1" className={`${inputClass} pl-11 font-mono`} /></div></label>
-              <label><span className="text-xs font-bold text-slate-500">Port</span><input required type="number" min="1" max="65535" value={serverPort} onChange={(event) => setServerPort(Number(event.target.value))} className={`${inputClass} font-mono`} /></label>
+              <label className="sm:col-span-2"><span className="text-xs font-semibold text-slate-500">Tên server</span><input required minLength={2} maxLength={40} value={serverName} onChange={(event) => setServerName(event.target.value)} placeholder="NsoX" className={inputClass} /></label>
+              <label><span className="text-xs font-semibold text-slate-500">Địa chỉ</span><input required value={serverHost} onChange={(event) => setServerHost(event.target.value)} placeholder="127.0.0.1" className={`${inputClass} font-mono`} /></label>
+              <label><span className="text-xs font-bold text-slate-500">Cổng kết nối</span><input required type="number" min="1" max="65535" value={serverPort} onChange={(event) => setServerPort(Number(event.target.value))} className={`${inputClass} font-mono`} /></label>
             </div>
           </section>
         </form>
 
-        <aside className="space-y-4 lg:sticky lg:top-24">
-          <div className="rounded-3xl border border-rose-200 bg-white p-5 shadow-[0_18px_50px_rgba(237,76,80,.10)]">
-            <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-rose-50 text-rose-500"><PackageOpen className="h-5 w-5" /></span><div><p className="text-xs text-slate-400">Đang chọn</p><p className="text-sm font-black text-slate-800">{selectionName}</p></div></div>
-            <div className="my-5 border-t border-dashed border-rose-200" />
-            <div className="space-y-3 text-sm"><div className="flex justify-between gap-3"><span className="text-slate-400">Server</span><b className="max-w-48 truncate text-slate-700">{serverName || 'Chưa nhập'}</b></div><div className="flex justify-between gap-3"><span className="text-slate-400">Kết nối</span><b className="max-w-48 truncate font-mono text-xs text-slate-600">{serverHost || '—'}:{serverPort}</b></div>{balance !== null && <div className="flex justify-between gap-3"><span className="text-slate-400">Số dư</span><b className="text-slate-700">{balance.toLocaleString('vi-VN')}đ</b></div>}</div>
-            <div className="mt-5 flex items-end justify-between rounded-2xl bg-rose-50 px-4 py-3"><span className="text-xs font-bold text-rose-400">Thanh toán</span><strong className="text-xl font-black text-rose-600">{formatPrice(selectedPrice)}</strong></div>
+        <aside className="lg:sticky lg:top-24">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <p className="text-sm font-bold leading-5 text-slate-800">{selectionName}</p>
+            <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4"><span className="text-sm text-slate-500">Tổng</span><strong className="text-xl font-black text-rose-600">{formatPrice(selectedPrice)}</strong></div>
+            {balance !== null && <p className="mt-2 text-xs text-slate-400">Số dư {balance.toLocaleString('vi-VN')}đ</p>}
             {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2.5 text-xs font-bold text-red-600">{error}</p>}
             {message && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2.5 text-xs font-bold text-emerald-700">{message}</p>}
-            {downloadUrl ? <a href={downloadUrl} className="mt-3 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white text-sm font-black text-rose-600 hover:bg-rose-50"><Download className="h-4 w-4" />Tải ngay</a> : null}
-            <button form="nso-builder-form" disabled={submitting || (platform === 'jar' ? !selectedVersion : !selectedOffer)} className="mt-3 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#ed4c50] text-sm font-black text-white shadow-lg shadow-rose-200 transition hover:bg-rose-600 disabled:opacity-60">{submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}{submitting ? 'Đang tạo...' : platform === 'jar' ? cloneBundle ? 'Tạo bộ 5 JAR' : 'Tạo JAR' : 'Thêm server'}</button>
+            {downloadUrl ? <a href={downloadUrl} className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-white text-sm font-bold text-rose-600 hover:bg-rose-50"><Download className="h-4 w-4" />Tải xuống</a> : null}
+            <button form="nso-builder-form" disabled={submitting || (platform === 'jar' ? !selectedVersion : !selectedOffer)} className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#ed4c50] text-sm font-bold text-white transition hover:bg-rose-600 disabled:opacity-60">{submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}{submitting ? 'Đang tạo...' : 'Tạo game'}</button>
           </div>
         </aside>
       </div>
 
-      <section className="rounded-3xl border border-rose-100 bg-white p-5 shadow-sm sm:p-7">
-        <div className="flex items-center justify-between gap-4"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-rose-50 text-rose-500"><History className="h-4 w-4" /></span><div><h2 className="text-sm font-black text-slate-800">Bản đã tạo</h2><p className="text-xs text-slate-400">{historyCount ? `${historyCount} bản trong tài khoản` : 'Chưa có bản nào'}</p></div></div><button type="button" onClick={() => void loadHistory()} className="grid h-9 w-9 place-items-center rounded-xl border border-rose-100 text-rose-400 hover:bg-rose-50" aria-label="Làm mới"><RefreshCcw className={`h-4 w-4 ${loadingHistory ? 'animate-spin' : ''}`} /></button></div>
-        {historyCount ? (
+      {historyCount > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-7">
+          <div className="flex items-center justify-between gap-4"><h2 className="text-sm font-bold text-slate-800">File của bạn</h2><button type="button" onClick={() => void loadHistory()} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-400 hover:text-rose-500" aria-label="Làm mới"><RefreshCcw className={`h-3.5 w-3.5 ${loadingHistory ? 'animate-spin' : ''}`} /></button></div>
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {jobs.map((job) => <article key={job.id} className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black text-slate-800">{job.server_name}</p><p className="mt-1 truncate font-mono text-[10px] text-slate-400">{job.output_name}</p></div><span className="rounded-full bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-500">{job.output_kind === 'clone_bundle' ? '5 JAR' : 'JAR'}</span></div><a href={`/api/nso-builder/jobs/${job.id}/download`} className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg bg-white px-3 text-xs font-black text-rose-600 ring-1 ring-rose-100 hover:bg-rose-50"><Download className="h-3.5 w-3.5" />Tải file</a></article>)}
-            {accesses.map((access) => <article key={access.id} className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black text-slate-800">{access.server_name}</p><p className="mt-1 truncate text-[10px] text-slate-400">{access.channel?.name || access.channel_id}</p></div><span className="rounded-full bg-rose-50 px-2 py-1 text-[10px] font-black uppercase text-rose-500">{access.channel?.platform || 'client'}</span></div>{access.status === 'active' && access.channel?.download_url && <a href={access.channel.download_url} className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg bg-white px-3 text-xs font-black text-rose-600 ring-1 ring-rose-100 hover:bg-rose-50"><ExternalLink className="h-3.5 w-3.5" />Mở bản tải</a>}</article>)}
+            {jobs.map((job) => <article key={job.id} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-800">{job.server_name}</p><p className="mt-1 text-xs text-slate-400">{job.version_code} · {job.output_kind === 'clone_bundle' ? '5 bản' : '1 bản'}</p></div><a href={`/api/nso-builder/jobs/${job.id}/download`} className="text-xs font-bold text-rose-600 hover:text-rose-700">Tải xuống</a></div></article>)}
+            {accesses.map((access) => <article key={access.id} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-800">{access.server_name}</p><p className="mt-1 truncate text-xs text-slate-400">{access.channel?.name || 'Ninja School'}</p></div>{access.status === 'active' && access.channel?.download_url && <a href={access.channel.download_url} className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-700">Tải xuống<ExternalLink className="h-3 w-3" /></a>}</div></article>)}
           </div>
-        ) : (
-          <div className="mt-5 rounded-2xl border border-dashed border-rose-200 bg-rose-50/40 px-4 py-8 text-center text-sm text-slate-400">Bản mới sẽ xuất hiện tại đây sau khi tạo.</div>
-        )}
-      </section>
+        </section>
+      )}
     </div>
   );
 }

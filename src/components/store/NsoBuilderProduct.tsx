@@ -5,12 +5,12 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowUpRight, FileArchive } from 'lucide-react';
 
-import type { NsoBuilderSettings, NsoBuildVersion, NsoPlatformChannel, NsoPlatformOffer } from '@/lib/types/database';
+import type { NsoBuilderSettings, NsoBuildVersion, NsoPlatformOffer, NsoStoreChannel } from '@/lib/types/database';
 
 type Props = {
   settings: NsoBuilderSettings;
   versions: NsoBuildVersion[];
-  channels: NsoPlatformChannel[];
+  channels: NsoStoreChannel[];
   offers: NsoPlatformOffer[];
 };
 
@@ -35,7 +35,7 @@ export default function NsoBuilderProduct({ settings, versions, offers }: Props)
         ) : (
           <div className="absolute inset-0 grid place-items-center bg-rose-50"><FileArchive className="h-12 w-12 text-rose-300" /></div>
         )}
-        <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-rose-600 shadow-sm">Build game</span>
+        <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-rose-600 shadow-sm">Tạo game</span>
       </div>
       <div className="p-5">
         <div className="flex items-start justify-between gap-4">

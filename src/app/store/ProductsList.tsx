@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { ArrowUpRight, Box, PackageX, Search, ShoppingBag, SlidersHorizontal } from 'lucide-react';
 
 import type { ProductWithVariants } from '@/lib/types/database';
-import type { NsoBuilderSettings, NsoBuildVersion, NsoPlatformChannel, NsoPlatformOffer } from '@/lib/types/database';
+import type { NsoBuilderSettings, NsoBuildVersion, NsoPlatformOffer, NsoStoreChannel } from '@/lib/types/database';
 import NsoBuilderProduct from '@/components/store/NsoBuilderProduct';
 import { cn } from '@/utils/helpers';
 
@@ -15,7 +15,7 @@ type ProductsListProps = {
   nsoBuilder?: {
     settings: NsoBuilderSettings;
     versions: NsoBuildVersion[];
-    channels: NsoPlatformChannel[];
+    channels: NsoStoreChannel[];
     offers: NsoPlatformOffer[];
   } | null;
 };
@@ -29,7 +29,7 @@ export default function ProductsList({ products, nsoBuilder }: ProductsListProps
   const [category, setCategory] = useState('all');
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const categories = useMemo(() => Array.from(new Set([
-    ...(nsoBuilder ? ['Build game'] : []),
+    ...(nsoBuilder ? ['Ninja School'] : []),
     ...products.map((product) => product.category),
   ])), [nsoBuilder, products]);
   const filtered = useMemo(() => {
@@ -41,7 +41,7 @@ export default function ProductsList({ products, nsoBuilder }: ProductsListProps
     });
   }, [category, products, query]);
   const builderVisible = Boolean(nsoBuilder && (nsoBuilder.versions.length > 0 || nsoBuilder.channels.length > 0)
-    && (category === 'all' || category === 'Build game')
+    && (category === 'all' || category === 'Ninja School')
     && (!query.trim() || `${nsoBuilder.settings.title} ${nsoBuilder.settings.description} Ninja School JAR build game`.toLocaleLowerCase('vi').includes(query.trim().toLocaleLowerCase('vi'))));
   const resultCount = filtered.length + (builderVisible ? 1 : 0);
 
