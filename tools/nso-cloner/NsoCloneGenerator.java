@@ -185,7 +185,159 @@ public final class NsoCloneGenerator {
         DataOutputStream data = new DataOutputStream(output);
         writeClass.invoke(transformer, data);
         data.flush();
-        return output.toByteArray();
+        // EmbedAdvMenu rewrites class-name UTF8 constants in place. Some NSO
+        // builds reuse those constants as LocalVariableTable names (for
+        // example `nameDQ`). After namespacing, the debug name becomes
+        // `c/nameDQ`, which strict J2ME loaders reject as an illegal field
+        // name. Debug tables are not needed at runtime, so remove them from
+        // every transformed class before putting it in the template.
+        return stripLocalVariableTables(output.toByteArray());
+    }
+
+    private static byte[] stripLocalVariableTables(byte[] classBytes) throws IOException {
+        DataInputStream input = new DataInputStream(new ByteArrayInputStream(classBytes));
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(classBytes.length);
+        DataOutputStream output = new DataOutputStream(bytes);
+
+        output.writeInt(input.readInt());
+        output.writeShort(input.readUnsignedShort());
+        output.writeShort(input.readUnsignedShort());
+
+        int constantPoolCount = input.readUnsignedShort();
+        output.writeShort(constantPoolCount);
+        String[] utf8 = new String[constantPoolCount];
+        for (int index = 1; index < constantPoolCount; index++) {
+            int tag = input.readUnsignedByte();
+            output.writeByte(tag);
+            switch (tag) {
+                case 1 -> {
+                    int length = input.readUnsignedShort();
+                    byte[] value = input.readNBytes(length);
+                    output.writeShort(length);
+                    output.write(value);
+                    utf8[index] = new String(value, StandardCharsets.UTF_8);
+                }
+                case 3, 4 -> copy(input, output, 4);
+                case 5, 6 -> {
+                    copy(input, output, 8);
+                    index++;
+                }
+                case 7, 8, 16, 19, 20 -> copy(input, output, 2);
+                case 9, 10, 11, 12, 17, 18 -> copy(input, output, 4);
+                case 15 -> copy(input, output, 3);
+                default -> throw new IOException("Unsupported class constant tag: " + tag);
+            }
+        }
+
+        copy(input, output, 6); // access_flags, this_class, super_class
+        int interfaceCount = copyUnsignedShort(input, output);
+        copy(input, output, interfaceCount * 2);
+
+        int fieldCount = copyUnsignedShort(input, output);
+        for (int index = 0; index < fieldCount; index++) {
+            copyMember(input, output, utf8, false);
+        }
+
+        int methodCount = copyUnsignedShort(input, output);
+        for (int index = 0; index < methodCount; index++) {
+            copyMember(input, output, utf8, true);
+        }
+
+        copyAttributes(input, output, utf8, false);
+        output.flush();
+        if (input.available() != 0) {
+            throw new IOException("Unexpected trailing class data: " + input.available());
+        }
+        return bytes.toByteArray();
+    }
+
+    private static void copyMember(
+        DataInputStream input,
+        DataOutputStream output,
+        String[] utf8,
+        boolean rewriteCode
+    ) throws IOException {
+        copy(input, output, 6); // access_flags, name_index, descriptor_index
+        copyAttributes(input, output, utf8, rewriteCode);
+    }
+
+    private static void copyAttributes(
+        DataInputStream input,
+        DataOutputStream output,
+        String[] utf8,
+        boolean rewriteCode
+    ) throws IOException {
+        int attributeCount = input.readUnsignedShort();
+        output.writeShort(attributeCount);
+        for (int index = 0; index < attributeCount; index++) {
+            int nameIndex = input.readUnsignedShort();
+            int length = input.readInt();
+            byte[] content = input.readNBytes(length);
+            if (content.length != length) {
+                throw new IOException("Truncated class attribute");
+            }
+            output.writeShort(nameIndex);
+            byte[] rewritten = rewriteCode && "Code".equals(utf8[nameIndex])
+                ? stripCodeLocalVariableTables(content, utf8)
+                : content;
+            output.writeInt(rewritten.length);
+            output.write(rewritten);
+        }
+    }
+
+    private static byte[] stripCodeLocalVariableTables(byte[] content, String[] utf8) throws IOException {
+        DataInputStream input = new DataInputStream(new ByteArrayInputStream(content));
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(content.length);
+        DataOutputStream output = new DataOutputStream(bytes);
+
+        copy(input, output, 4); // max_stack, max_locals
+        int codeLength = input.readInt();
+        output.writeInt(codeLength);
+        copy(input, output, codeLength);
+        int exceptionCount = copyUnsignedShort(input, output);
+        copy(input, output, exceptionCount * 8);
+
+        int nestedCount = input.readUnsignedShort();
+        List<byte[]> kept = new ArrayList<>(nestedCount);
+        for (int index = 0; index < nestedCount; index++) {
+            int nameIndex = input.readUnsignedShort();
+            int length = input.readInt();
+            byte[] nested = input.readNBytes(length);
+            if (nested.length != length) {
+                throw new IOException("Truncated Code attribute");
+            }
+            String name = utf8[nameIndex];
+            if ("LocalVariableTable".equals(name) || "LocalVariableTypeTable".equals(name)) {
+                continue;
+            }
+            ByteArrayOutputStream attributeBytes = new ByteArrayOutputStream(length + 6);
+            DataOutputStream attribute = new DataOutputStream(attributeBytes);
+            attribute.writeShort(nameIndex);
+            attribute.writeInt(length);
+            attribute.write(nested);
+            attribute.flush();
+            kept.add(attributeBytes.toByteArray());
+        }
+        output.writeShort(kept.size());
+        for (byte[] attribute : kept) {
+            output.write(attribute);
+        }
+        output.flush();
+        return bytes.toByteArray();
+    }
+
+    private static int copyUnsignedShort(DataInputStream input, DataOutputStream output) throws IOException {
+        int value = input.readUnsignedShort();
+        output.writeShort(value);
+        return value;
+    }
+
+    private static void copy(DataInputStream input, DataOutputStream output, int length) throws IOException {
+        byte[] value = input.readNBytes(length);
+        if (value.length != length) {
+            throw new IOException("Truncated class data");
+        }
+        output.write(value);
     }
 
     private static byte[] buildLauncherManifest(

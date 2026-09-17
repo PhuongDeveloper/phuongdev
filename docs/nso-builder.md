@@ -27,7 +27,8 @@ giao dịch cơ sở dữ liệu thất bại, API xóa file vừa upload.
 ## Kiểm tra JAR mẫu
 
 Chạy `npm run test:nso-jar`. Bài kiểm tra vá cấu hình vào từng tab, xác nhận các
-bản x3/x6/x12/x24 có đúng số class server và ZIP giao hàng chứa đủ năm JAR.
+bản x3/x6/x12/x24 có đúng số class server, không còn tên field/biến debug sai
+chuẩn JVM và ZIP giao hàng chứa đủ năm JAR.
 
 ## Thêm phiên bản sau này
 
@@ -58,6 +59,9 @@ server trong `/admin/nso-builder`.
 Logic biến đổi bytecode thật của `EmbedAdvMenu.jar` đã được gọi qua adapter
 headless `tools/nso-cloner/NsoCloneGenerator.java`. Adapter tạo namespace class,
 `Static.class`, RecordStore và launcher riêng cho từng tab giống công cụ gốc.
+Sau khi đổi namespace, adapter loại `LocalVariableTable`/`LocalVariableTypeTable`
+khỏi class. Đây chỉ là metadata debug nhưng một số bản 1.4.8 dùng chung hằng UTF8
+giữa tên class và tên biến; giữ lại sẽ khiến KEmulator báo `Illegal field name`.
 Java chỉ dùng khi tạo hoặc thay template; lúc khách mua, Vercel chỉ vá toàn bộ
 hằng server rồi đóng gói nên không cần JVM hay máy Windows chạy nền.
 
