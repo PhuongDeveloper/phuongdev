@@ -20,6 +20,7 @@ import {
   Settings2,
   ShieldCheck,
   ShoppingCart,
+  Hammer,
   Tags,
   Users,
   X,
@@ -31,6 +32,7 @@ import { cn } from '@/utils/helpers';
 const commerceLinks = [
   { href: '/admin', label: 'Tổng quan', icon: LayoutDashboard },
   { href: '/admin/products', label: 'Sản phẩm & kho', icon: Boxes },
+  { href: '/admin/nso-builder', label: 'Build Ninja School', icon: Hammer },
   { href: '/admin/orders', label: 'Đơn hàng', icon: ShoppingCart },
   { href: '/admin/transactions', label: 'Đối soát nạp tiền', icon: CircleDollarSign },
   { href: '/admin/users', label: 'Khách hàng', icon: Users },

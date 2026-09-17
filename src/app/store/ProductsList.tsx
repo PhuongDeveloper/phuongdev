@@ -6,19 +6,27 @@ import Link from 'next/link';
 import { ArrowUpRight, Box, PackageX, Search, ShoppingBag, SlidersHorizontal } from 'lucide-react';
 
 import type { ProductWithVariants } from '@/lib/types/database';
+import type { NsoBuilderSettings, NsoBuildVersion } from '@/lib/types/database';
+import NsoBuilderProduct from '@/components/store/NsoBuilderProduct';
 import { cn } from '@/utils/helpers';
 
-type ProductsListProps = { products: ProductWithVariants[] };
+type ProductsListProps = {
+  products: ProductWithVariants[];
+  nsoBuilder?: { settings: NsoBuilderSettings; versions: NsoBuildVersion[] } | null;
+};
 
 function formatPrice(value: number) {
   return value === 0 ? 'Miễn phí' : `${value.toLocaleString('vi-VN')}đ`;
 }
 
-export default function ProductsList({ products }: ProductsListProps) {
+export default function ProductsList({ products, nsoBuilder }: ProductsListProps) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
-  const categories = useMemo(() => Array.from(new Set(products.map((product) => product.category))), [products]);
+  const categories = useMemo(() => Array.from(new Set([
+    ...(nsoBuilder ? ['Build game'] : []),
+    ...products.map((product) => product.category),
+  ])), [nsoBuilder, products]);
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('vi');
     return products.filter((product) => {
@@ -27,6 +35,10 @@ export default function ProductsList({ products }: ProductsListProps) {
       return matchCategory && matchQuery;
     });
   }, [category, products, query]);
+  const builderVisible = Boolean(nsoBuilder && nsoBuilder.versions.length > 0
+    && (category === 'all' || category === 'Build game')
+    && (!query.trim() || `${nsoBuilder.settings.title} ${nsoBuilder.settings.description} Ninja School JAR build game`.toLocaleLowerCase('vi').includes(query.trim().toLocaleLowerCase('vi'))));
+  const resultCount = filtered.length + (builderVisible ? 1 : 0);
 
   return (
     <div className="rounded-[28px] border border-slate-200/70 bg-white p-4 shadow-2xl shadow-slate-900/10 sm:p-6">
@@ -34,7 +46,7 @@ export default function ProductsList({ products }: ProductsListProps) {
         <div>
           <p className="text-[11px] font-black uppercase tracking-[0.18em] text-rose-500">Danh mục đang mở bán</p>
           <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">Kho sản phẩm số</h2>
-          <p className="mt-1 text-sm text-slate-500">{filtered.length} sản phẩm phù hợp</p>
+          <p className="mt-1 text-sm text-slate-500">{resultCount} sản phẩm phù hợp</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <label className="relative min-w-0 sm:w-72">
@@ -56,12 +68,13 @@ export default function ProductsList({ products }: ProductsListProps) {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {resultCount === 0 ? (
         <div className="grid min-h-80 place-items-center text-center">
           <div><PackageX className="mx-auto h-10 w-10 text-slate-300" /><p className="mt-3 font-bold text-slate-700">Không tìm thấy sản phẩm</p><p className="mt-1 text-sm text-slate-400">Thử từ khóa hoặc danh mục khác.</p></div>
         </div>
       ) : (
         <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {builderVisible && nsoBuilder && <NsoBuilderProduct settings={nsoBuilder.settings} versions={nsoBuilder.versions} />}
           {filtered.map((product) => {
             const variants = (product.product_variants || []).filter((variant) => variant.is_active);
             const prices = variants.map((variant) => Number(variant.price));

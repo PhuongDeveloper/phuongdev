@@ -175,6 +175,52 @@ export interface UserProfile {
   updated_at: string;
 }
 
+/** Cấu hình trang build Ninja School. */
+export interface NsoBuilderSettings {
+  id: boolean;
+  title: string;
+  description: string;
+  content: string;
+  banner_url: string | null;
+  badge: string;
+  default_port: number;
+  is_active: boolean;
+  updated_at: string;
+}
+
+/** Một JAR mẫu đã build sẵn mà API có thể cá nhân hóa. */
+export interface NsoBuildVersion {
+  code: string;
+  name: string;
+  description: string;
+  price: number;
+  template_file?: string;
+  is_active: boolean;
+  sold_count: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type NsoBuildStatus = 'completed';
+
+/** File JAR đã tạo và bàn giao cho khách hàng. */
+export interface NsoBuildJob {
+  id: string;
+  user_id: string;
+  version_code: string;
+  server_name: string;
+  server_host: string;
+  server_port: number;
+  price: number;
+  status: NsoBuildStatus;
+  output_name: string | null;
+  output_size: number | null;
+  built_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Giao dịch nạp tiền */
 export interface Transaction {
   id: string;
