@@ -22,7 +22,12 @@ export default async function TransactionsPage() {
   const completed = (transactions || []).filter((item) => item.status === 'completed');
   const pending = (transactions || []).filter((item) => item.status === 'pending');
   const manualCutoff = getRechargeManualReviewCutoff();
-  const manualCandidates = (transactions || []).filter((item) => item.purpose === 'recharge' && ['pending', 'expired'].includes(item.status) && new Date(item.created_at).getTime() >= manualCutoff);
+  const manualCandidates = (transactions || []).filter((item) => {
+    const canApprove = item.purpose === 'recharge'
+      ? ['pending', 'expired'].includes(item.status)
+      : item.purpose === 'order' && item.status === 'pending';
+    return canApprove && new Date(item.created_at).getTime() >= manualCutoff;
+  });
   const rejected = (events || []).filter((item) => item.status === 'rejected' || item.status === 'unmatched');
   const rechargeTotal = completed.filter((item) => item.purpose === 'recharge').reduce((sum, item) => sum + Number(item.amount || 0), 0);
 

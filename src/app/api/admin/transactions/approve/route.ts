@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAdminSession } from '@/lib/auth/admin';
+import { fulfillNsoPaymentOrder } from '@/lib/nso-builder/payment';
 import { paymentConfig } from '@/lib/payments/config';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -29,32 +30,58 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
   if (transactionError) return NextResponse.json({ error: 'Không thể đọc giao dịch.' }, { status: 500 });
   if (!transaction) return NextResponse.json({ error: 'Không tìm thấy giao dịch.' }, { status: 404 });
-  if (transaction.purpose !== 'recharge') return NextResponse.json({ error: 'Chỉ có thể duyệt giao dịch nạp ví.' }, { status: 422 });
-  if (!['pending', 'expired'].includes(transaction.status)) return NextResponse.json({ error: `Giao dịch đã ở trạng thái ${transaction.status}.` }, { status: 409 });
+  if (!['recharge', 'order'].includes(transaction.purpose)) {
+    return NextResponse.json({ error: 'Giao dịch này không hỗ trợ duyệt thủ công.' }, { status: 422 });
+  }
+  const allowedStatuses = transaction.purpose === 'recharge' ? ['pending', 'expired'] : ['pending'];
+  if (!allowedStatuses.includes(transaction.status)) {
+    return NextResponse.json({ error: `Giao dịch đã ở trạng thái ${transaction.status}.` }, { status: 409 });
+  }
 
   const providerId = `manual-${transaction.id}-${Date.now()}`;
-  const { data: result, error: rpcError } = await admin.rpc('manual_complete_recharge', {
-    p_transaction_id: transaction.id,
-    p_provider_transaction_id: providerId,
-    p_bank_ref: bankRef || 'manual_admin',
-    p_payload: {
-      source: 'manual_admin',
-      approved_by: session.user.id,
-      approved_at: new Date().toISOString(),
-      transaction_code: transaction.transaction_code,
-    },
-  });
+  const auditPayload = {
+    source: 'manual_admin',
+    approved_by: session.user.id,
+    approved_at: new Date().toISOString(),
+    transaction_code: transaction.transaction_code,
+  };
+  const completion = transaction.purpose === 'recharge'
+    ? await admin.rpc('manual_complete_recharge', {
+        p_transaction_id: transaction.id,
+        p_provider_transaction_id: providerId,
+        p_bank_ref: bankRef || 'manual_admin',
+        p_payload: auditPayload,
+      })
+    : await admin.rpc('complete_payment_transaction', {
+        p_transaction_id: transaction.id,
+        p_received_amount: Number(transaction.amount),
+        p_provider_transaction_id: providerId,
+        p_bank_ref: bankRef || 'manual_admin',
+        p_payload: auditPayload,
+      });
+  const { data: result, error: rpcError } = completion;
 
   if (rpcError) {
-    console.error('[ManualRecharge] Completion RPC failed', rpcError);
+    console.error('[ManualPayment] Completion RPC failed', rpcError);
     return NextResponse.json({ error: 'Không thể hoàn tất giao dịch.' }, { status: 500 });
   }
   if (!result?.success || result?.duplicate) {
     return NextResponse.json({ error: result?.error || 'Giao dịch đã được xử lý trước đó.' }, { status: 409 });
   }
 
+  if (transaction.purpose === 'order') {
+    try {
+      await fulfillNsoPaymentOrder(transaction.id);
+    } catch (fulfillmentError) {
+      console.error('[ManualPayment] NSO fulfillment failed', fulfillmentError);
+      return NextResponse.json({
+        error: 'Đã ghi nhận thanh toán nhưng chưa tạo được file. Hãy tải lại trang để hệ thống thử lại.',
+      }, { status: 500 });
+    }
+  }
+
   const internalSecret = process.env.INTERNAL_API_SECRET;
-  if (internalSecret) {
+  if (transaction.purpose === 'recharge' && internalSecret) {
     const { data: profile } = await admin
       .from('user_profiles')
       .select('email, display_name')
@@ -71,9 +98,9 @@ export async function POST(request: NextRequest) {
           transaction_code: transaction.transaction_code,
           new_balance: Number(result.new_balance),
         }),
-      }).catch((emailError) => console.error('[ManualRecharge] Email notification failed', emailError));
+      }).catch((emailError) => console.error('[ManualPayment] Email notification failed', emailError));
     }
   }
 
-  return NextResponse.json({ success: true, transaction_id: transaction.id });
+  return NextResponse.json({ success: true, transaction_id: transaction.id, purpose: transaction.purpose });
 }
