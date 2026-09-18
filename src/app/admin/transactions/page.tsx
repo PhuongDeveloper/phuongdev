@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { AlertTriangle, CheckCircle2, CircleDollarSign, Clock3, Radio } from 'lucide-react';
 
 import { createAdminClient } from '@/lib/supabase/admin';
-import { cleanupStalePaymentEvents, cleanupStaleRechargeTransactions, getRechargeManualReviewCutoff } from '@/lib/payments/zalopay';
+import { cleanupStalePaymentEvents, cleanupStaleRechargeTransactions, getRechargeManualReviewCutoff, isPaymentEventWithinReviewWindow } from '@/lib/payments/zalopay';
 import ManualApproveButton from './ManualApproveButton';
 
 // Admin data depends on the authenticated request and server-only credentials.
@@ -28,7 +28,9 @@ export default async function TransactionsPage() {
       : item.purpose === 'order' && item.status === 'pending';
     return canApprove && new Date(item.created_at).getTime() >= manualCutoff;
   });
-  const rejected = (events || []).filter((item) => item.status === 'rejected' || item.status === 'unmatched');
+  const rejected = (events || []).filter((item) =>
+    (item.status === 'rejected' || item.status === 'unmatched') && isPaymentEventWithinReviewWindow(item),
+  );
   const rechargeTotal = completed.filter((item) => item.purpose === 'recharge').reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
   return (

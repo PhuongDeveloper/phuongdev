@@ -33,21 +33,84 @@ export function getRechargeManualReviewCutoff() {
   return Date.now() - PAYMENT_EVENT_RETENTION_MS;
 }
 
-/** Xóa các webhook lỗi cũ; sự kiện đã khớp vẫn được giữ để đối soát lịch sử. */
+function parseProviderTransactionTime(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value < 10_000_000_000 ? value * 1000 : value;
+  }
+  if (typeof value !== 'string' || !value.trim()) return null;
+
+  const text = value.trim();
+  // API hiện chỉ trả YYYY-MM-DD cho một số giao dịch. Dùng cuối ngày Việt Nam
+  // để cảnh báo của giao dịch hôm nay không biến mất sớm chỉ vì thiếu giờ.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const timestamp = Date.parse(`${text}T23:59:59+07:00`);
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+  const vietnameseDate = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (vietnameseDate) {
+    const [, day, month, year, hour = '0', minute = '0', second = '0'] = vietnameseDate;
+    const timestamp = Date.parse(
+      `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:${second}+07:00`,
+    );
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+
+  const sqlDate = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  const timestamp = Date.parse(sqlDate
+    ? `${sqlDate[1]}-${sqlDate[2]}-${sqlDate[3]}T${sqlDate[4]}:${sqlDate[5]}:${sqlDate[6] || '00'}+07:00`
+    : text);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+type PaymentEventAge = {
+  created_at?: string | null;
+  raw_payload?: { transactionDate?: unknown } | null;
+};
+
+/** Dùng ngày giao dịch từ nhà cung cấp, tránh webhook cũ bị coi là mới khi API phát lại. */
+export function isPaymentEventWithinReviewWindow(event: PaymentEventAge, now = Date.now()) {
+  const createdTime = event.created_at ? Date.parse(event.created_at) : Number.NaN;
+  const providerDate = event.raw_payload?.transactionDate;
+  const dateOnly = typeof providerDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(providerDate.trim())
+    ? providerDate.trim()
+    : null;
+  // Nếu sự kiện được ghi nhận đúng ngày giao dịch thì created_at là mốc chính
+  // xác hơn. Nếu API phát lại vào ngày khác, phải dùng ngày gốc để chặn bản cũ.
+  const createdVietnamDate = Number.isNaN(createdTime)
+    ? null
+    : new Date(createdTime + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const providerTime = dateOnly && dateOnly === createdVietnamDate
+    ? createdTime
+    : parseProviderTransactionTime(providerDate);
+  const eventTime = providerTime ?? (Number.isNaN(createdTime) ? now : createdTime);
+  return eventTime >= now - PAYMENT_EVENT_RETENTION_MS;
+}
+
+/** Xóa webhook lỗi cũ theo ngày giao dịch gốc; sự kiện đã khớp vẫn được giữ. */
 export async function cleanupStalePaymentEvents() {
   const now = Date.now();
   if (isCleaningUp || now - lastCleanupTime < 10 * 60 * 1000) return;
   isCleaningUp = true;
   lastCleanupTime = now;
   try {
-    const cutoff = new Date(now - PAYMENT_EVENT_RETENTION_MS).toISOString();
     const admin = createAdminClient();
-    const { error } = await admin
+    const { data: candidates, error: readError } = await admin
       .from('payment_events')
-      .delete()
+      .select('id, created_at, raw_payload')
       .in('status', ['rejected', 'unmatched'])
-      .lt('created_at', cutoff);
-    if (error) console.error('[ZaloPay] Cleanup payment events failed:', error);
+      .order('created_at', { ascending: true })
+      .limit(1000);
+    if (readError) {
+      console.error('[ZaloPay] Read payment events for cleanup failed:', readError);
+      return;
+    }
+    const staleIds = (candidates || [])
+      .filter((event) => !isPaymentEventWithinReviewWindow(event, now))
+      .map((event) => event.id);
+    if (staleIds.length > 0) {
+      const { error } = await admin.from('payment_events').delete().in('id', staleIds);
+      if (error) console.error('[ZaloPay] Cleanup payment events failed:', error);
+    }
   } finally {
     isCleaningUp = false;
   }
@@ -116,6 +179,10 @@ export async function syncZaloPayTransactions() {
 
     // Duyệt qua danh sách giao dịch
     for (const txn of data.transactions) {
+      // API lịch sử thường phát lại giao dịch cũ. Không lưu lại các bản ghi đã
+      // quá cửa sổ kiểm tra, nếu không cảnh báo vừa xóa sẽ xuất hiện trở lại.
+      if (!isPaymentEventWithinReviewWindow({ raw_payload: txn }, now)) continue;
+
       // Chỉ quan tâm giao dịch tiền VÀO hoặc có chứa mã PD
       // Đôi khi test bằng tài khoản cá nhân có thể là OUT, nên ta ưu tiên check mã PD
       const description = String(txn.description || '').toUpperCase();

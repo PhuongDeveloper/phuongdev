@@ -26,41 +26,31 @@ export default function HeroSection({ siteConfig }: HeroSectionProps) {
         
         {/* Trống Đồng gốc đã được raster hóa để giữ nguyên chi tiết mà không bắt trình duyệt vẽ lại SVG nặng mỗi khung hình. */}
         <div
-          className="hero-drum absolute z-0 opacity-10 pointer-events-none animate-spin-slow"
+          className="hero-drum absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2 opacity-[0.13] sm:opacity-10 pointer-events-none"
           aria-hidden="true"
         >
-          <Image
-            src="/trongdong.webp"
-            alt=""
-            width={900}
-            height={900}
-            sizes="(max-width: 767px) 0px, 900px"
-            quality={78}
-            loading="lazy"
-            decoding="async"
-            className="w-[800px] h-[800px] md:w-[1200px] md:h-[1200px] max-w-none"
-          />
+          <div className="animate-spin-slow">
+            <Image
+              src="/trongdong.webp"
+              alt=""
+              width={900}
+              height={900}
+              sizes="(max-width: 639px) 560px, (max-width: 1023px) 760px, 900px"
+              quality={75}
+              decoding="async"
+              priority
+              className="h-[560px] w-[560px] max-w-none sm:h-[760px] sm:w-[760px] md:h-[1200px] md:w-[1200px]"
+            />
+          </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center max-w-4xl mx-auto">
-          {/* Badge */}
-          <div
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 border border-rose-100 text-rose-600 text-sm font-medium mb-6 animate-fade-in-up"
-            style={{ animationDelay: '0ms' }}
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-            </span>
-            Giải pháp công nghệ toàn diện
-          </div>
-
           {/* Tiêu đề chính */}
           <h1
             className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-slate-900 mb-8 animate-fade-in-up"
-            style={{ animationDelay: '100ms' }}
+            style={{ animationDelay: '0ms' }}
           >
             {title.split(' ').map((word, idx) => (
               <span key={idx} className={idx % 3 === 0 ? 'text-rose-600' : ''}>
@@ -72,7 +62,7 @@ export default function HeroSection({ siteConfig }: HeroSectionProps) {
           {/* Mô tả */}
           <p
             className="text-xl text-slate-600 mb-10 leading-relaxed max-w-3xl mx-auto animate-fade-in-up"
-            style={{ animationDelay: '200ms' }}
+            style={{ animationDelay: '100ms' }}
           >
             {description}
           </p>
@@ -80,7 +70,7 @@ export default function HeroSection({ siteConfig }: HeroSectionProps) {
           {/* Các nút Call-to-action */}
           <div
             className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in-up"
-            style={{ animationDelay: '300ms' }}
+            style={{ animationDelay: '200ms' }}
           >
             <Link href="/store" className="w-full sm:w-auto">
               <Button size="lg" className="w-full sm:w-auto group bg-rose-600 hover:bg-rose-700 text-white">

@@ -95,10 +95,6 @@ body {
   will-change: transform;
 }
 
-@media (max-width: 767px) {
-  .hero-drum { display: none; }
-}
-
 /* --- Glassmorphism Utility Classes --- */
 .glass {
   background: var(--glass-bg);
