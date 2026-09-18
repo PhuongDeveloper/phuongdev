@@ -164,8 +164,8 @@ export default function NavbarClient({
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 group">
               {logoUrl ? (
-                <div className="relative h-20 w-[280px] flex items-center">
-                  <Image src={logoUrl} alt="PhuongDev Logo" fill sizes="280px" className="object-contain object-left scale-110 origin-left" />
+                <div className="relative h-12 w-[210px] sm:w-[260px]">
+                  <Image src={logoUrl} alt="PhuongDev Logo" fill sizes="(max-width: 639px) 210px, 260px" className="origin-left scale-[1.35] object-contain object-left" />
                 </div>
               ) : (
                 <>

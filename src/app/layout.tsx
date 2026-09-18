@@ -28,6 +28,10 @@ export const metadata: Metadata = {
   publisher: 'PhuongDev',
   applicationName: 'PhuongDev',
   category: 'Công nghệ',
+  icons: {
+    icon: [{ url: '/phuongdev-mark.png?v=pd-red-mark-20260918', type: 'image/png' }],
+    apple: [{ url: '/phuongdev-mark.png?v=pd-red-mark-20260918', type: 'image/png' }],
+  },
   alternates: { canonical: '/' },
   robots: {
     index: true,

@@ -48,13 +48,13 @@ export default function Footer({ siteConfig = {} }: FooterProps) {
           <div className="space-y-4">
             <Link href="/" className="flex items-center gap-2">
               {logoUrl ? (
-                <div className="relative h-20 w-[280px] flex items-center">
+                <div className="relative h-14 w-[260px]">
                   <Image
                     src={logoUrl}
                     alt="PhuongDev Logo"
                     fill
-                    sizes="280px"
-                    className="object-contain object-left scale-110 origin-left"
+                    sizes="260px"
+                    className="origin-left scale-[1.2] object-contain object-left"
                   />
                 </div>
               ) : (
