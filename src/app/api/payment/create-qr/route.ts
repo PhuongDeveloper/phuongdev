@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { ensureUserProfile } from '@/lib/auth/ensure-user-profile';
-import { createVietQrUrl, publicBankDetails } from '@/lib/payments/config';
+import { createVietQrUrl, getPaymentSettings, publicBankDetails } from '@/lib/payments/config';
 import { createTransactionCode } from '@/lib/payments/transaction-code';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -75,14 +75,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const paymentSettings = await getPaymentSettings();
     return NextResponse.json({
       success: true,
-      qr_url: createVietQrUrl(amount, transactionCode),
+      qr_url: createVietQrUrl(amount, transactionCode, paymentSettings),
       transaction_code: transactionCode,
       transaction_id: transaction.id,
       amount,
       expires_at: expiresAt,
-      bank: publicBankDetails(),
+      bank: publicBankDetails(paymentSettings),
     });
   } catch (error) {
     console.error('[Recharge] Unexpected create QR error', error);

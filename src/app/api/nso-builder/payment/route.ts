@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { ensureUserProfile } from '@/lib/auth/ensure-user-profile';
 import { uuidPattern, validateNsoServer } from '@/lib/nso-builder/validation';
-import { createVietQrUrl, publicBankDetails } from '@/lib/payments/config';
+import { createVietQrUrl, getPaymentSettings, publicBankDetails } from '@/lib/payments/config';
 import { createTransactionCode } from '@/lib/payments/transaction-code';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
@@ -88,14 +88,15 @@ export async function POST(request: NextRequest) {
   const code = String(data.transaction_code || transactionCode);
   const amount = Number(data.amount);
   const expiry = String(data.expires_at || expiresAt);
+  const paymentSettings = await getPaymentSettings();
   return NextResponse.json({
     success: true,
-    qr_url: createVietQrUrl(amount, code),
+    qr_url: createVietQrUrl(amount, code, paymentSettings),
     transaction_code: code,
     transaction_id: data.transaction_id,
     order_id: data.order_id,
     amount,
     expires_at: expiry,
-    bank: publicBankDetails(),
+    bank: publicBankDetails(paymentSettings),
   });
 }

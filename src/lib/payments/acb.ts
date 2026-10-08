@@ -1,10 +1,10 @@
-import { paymentConfig } from './config';
+import { getPaymentSettings, paymentConfig } from './config';
 import { fulfillNsoPaymentOrder } from '@/lib/nso-builder/payment';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
 
-type ZaloPayTransaction = {
+type AcbTransaction = {
   transactionID: string;
   amount: number;
   description: string;
@@ -12,10 +12,10 @@ type ZaloPayTransaction = {
   type: 'IN' | 'OUT';
 };
 
-type SieuthiCodeResponse = {
+type AcbApiResponse = {
   status: string;
   msg: string;
-  transactions: ZaloPayTransaction[];
+  transactions: AcbTransaction[];
 };
 
 // Lưu thời điểm sync cuối cùng trong memory để tránh gọi API quá nhiều lần (Rate Limit)
@@ -101,7 +101,7 @@ export async function cleanupStalePaymentEvents() {
       .order('created_at', { ascending: true })
       .limit(1000);
     if (readError) {
-      console.error('[ZaloPay] Read payment events for cleanup failed:', readError);
+      console.error('[ACB] Read payment events for cleanup failed:', readError);
       return;
     }
     const staleIds = (candidates || [])
@@ -109,7 +109,7 @@ export async function cleanupStalePaymentEvents() {
       .map((event) => event.id);
     if (staleIds.length > 0) {
       const { error } = await admin.from('payment_events').delete().in('id', staleIds);
-      if (error) console.error('[ZaloPay] Cleanup payment events failed:', error);
+      if (error) console.error('[ACB] Cleanup payment events failed:', error);
     }
   } finally {
     isCleaningUp = false;
@@ -131,7 +131,7 @@ export async function cleanupStaleRechargeTransactions() {
       .eq('purpose', 'recharge')
       .eq('status', 'pending')
       .lt('created_at', cutoff);
-    if (error) console.error('[ZaloPay] Cleanup stale recharge transactions failed:', error);
+    if (error) console.error('[ACB] Cleanup stale recharge transactions failed:', error);
   } finally {
     isCleaningRecharge = false;
   }
@@ -145,10 +145,10 @@ async function sendInternalEmail(path: string, body: Record<string, unknown>) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-internal-secret': internalSecret },
     body: JSON.stringify(body),
-  }).catch((err) => console.error('[ZaloPay] Email error:', err));
+  }).catch((err) => console.error('[ACB] Email error:', err));
 }
 
-export async function syncZaloPayTransactions() {
+export async function syncAcbTransactions() {
   const now = Date.now();
   // Giới hạn gọi API nhưng vẫn cho phép trạng thái mới được nhận gần như tức thời.
   if (now - lastSyncTime < MIN_SYNC_INTERVAL_MS || isSyncing) {
@@ -161,17 +161,21 @@ export async function syncZaloPayTransactions() {
   try {
     await cleanupStalePaymentEvents();
     await cleanupStaleRechargeTransactions();
-    const apiUrl = process.env.ZALOPAY_API_URL || 'https://sieuthicode.com/historyapizalopayv3/PZCE43-TD7PVE-P416-9516-QFS7';
+    const { apiUrl } = await getPaymentSettings();
+    if (!apiUrl) {
+      console.error('[ACB] API URL chưa được cấu hình trong trang Cấu hình thanh toán.');
+      return;
+    }
     const response = await fetch(apiUrl, { cache: 'no-store' });
     
     if (!response.ok) {
-      console.error('[ZaloPay] Lỗi HTTP khi gọi API:', response.status);
+      console.error('[ACB] Lỗi HTTP khi gọi API:', response.status);
       return;
     }
 
-    const data: SieuthiCodeResponse = await response.json();
+    const data: AcbApiResponse = await response.json();
     if (data.status !== 'success' || !Array.isArray(data.transactions)) {
-      console.error('[ZaloPay] Lỗi từ API:', data.msg);
+      console.error('[ACB] Lỗi từ API:', data.msg);
       return;
     }
 
@@ -183,8 +187,10 @@ export async function syncZaloPayTransactions() {
       // quá cửa sổ kiểm tra, nếu không cảnh báo vừa xóa sẽ xuất hiện trở lại.
       if (!isPaymentEventWithinReviewWindow({ raw_payload: txn }, now)) continue;
 
-      // Chỉ quan tâm giao dịch tiền VÀO hoặc có chứa mã PD
-      // Đôi khi test bằng tài khoản cá nhân có thể là OUT, nên ta ưu tiên check mã PD
+      // Chỉ giao dịch tiền vào mới có thể hoàn tất thanh toán.
+      if (txn.type !== 'IN') continue;
+
+      // Tìm mã thanh toán trong nội dung chuyển khoản.
       const description = String(txn.description || '').toUpperCase();
       const codeMatch = description.match(/PD[A-Z0-9]{8,10}/i);
       const code = codeMatch ? codeMatch[0].toUpperCase() : null;
@@ -195,7 +201,7 @@ export async function syncZaloPayTransactions() {
 
       // 1. Lưu vào payment_events để lưu vết
       const { error: eventError } = await admin.from('payment_events').insert({
-        provider: 'zalopay',
+        provider: 'acb',
         provider_transaction_id: providerId,
         transaction_code: code,
         transfer_amount: amount,
@@ -209,12 +215,12 @@ export async function syncZaloPayTransactions() {
       }
       
       if (eventError) {
-        console.error('[ZaloPay] Could not persist event', eventError);
+        console.error('[ACB] Could not persist event', eventError);
         continue;
       }
 
       if (!code) {
-        await admin.from('payment_events').update({ status: 'unmatched', reason: 'Không tìm thấy mã thanh toán' }).eq('provider', 'zalopay').eq('provider_transaction_id', providerId);
+        await admin.from('payment_events').update({ status: 'unmatched', reason: 'Không tìm thấy mã thanh toán' }).eq('provider', 'acb').eq('provider_transaction_id', providerId);
         continue;
       }
 
@@ -226,12 +232,12 @@ export async function syncZaloPayTransactions() {
         .maybeSingle();
 
       if (!transaction) {
-        await admin.from('payment_events').update({ status: 'unmatched', reason: 'Không tìm thấy giao dịch chờ đối soát' }).eq('provider', 'zalopay').eq('provider_transaction_id', providerId);
+        await admin.from('payment_events').update({ status: 'unmatched', reason: 'Không tìm thấy giao dịch chờ đối soát' }).eq('provider', 'acb').eq('provider_transaction_id', providerId);
         continue;
       }
 
       if (Number(transaction.amount) !== amount) {
-        await admin.from('payment_events').update({ status: 'rejected', reason: `Sai số tiền: cần ${transaction.amount}, nhận ${amount}` }).eq('provider', 'zalopay').eq('provider_transaction_id', providerId);
+        await admin.from('payment_events').update({ status: 'rejected', reason: `Sai số tiền: cần ${transaction.amount}, nhận ${amount}` }).eq('provider', 'acb').eq('provider_transaction_id', providerId);
         continue;
       }
 
@@ -245,12 +251,12 @@ export async function syncZaloPayTransactions() {
       });
 
       if (rpcError) {
-        console.error('[ZaloPay] Completion RPC failed', rpcError);
+        console.error('[ACB] Completion RPC failed', rpcError);
         continue;
       }
 
       if (result?.duplicate || !result?.success) {
-        await admin.from('payment_events').update({ status: 'rejected', reason: result?.error || 'Không thể hoàn tất giao dịch' }).eq('provider', 'zalopay').eq('provider_transaction_id', providerId);
+        await admin.from('payment_events').update({ status: 'rejected', reason: result?.error || 'Không thể hoàn tất giao dịch' }).eq('provider', 'acb').eq('provider_transaction_id', providerId);
         continue;
       }
 
@@ -258,7 +264,7 @@ export async function syncZaloPayTransactions() {
       await admin
         .from('payment_events')
         .update({ status: 'matched', reason: null })
-        .eq('provider', 'zalopay')
+        .eq('provider', 'acb')
         .eq('provider_transaction_id', providerId);
 
       // 5. Gửi email thông báo
@@ -271,7 +277,7 @@ export async function syncZaloPayTransactions() {
         } catch (fulfillmentError) {
           // Tiền đã được xác nhận; không đánh dấu giao dịch lỗi. payment/status
           // sẽ thử bàn giao lại và email chỉ được gửi khi đã có file/link tải.
-          console.error('[ZaloPay] NSO fulfillment failed', fulfillmentError);
+          console.error('[ACB] NSO fulfillment failed', fulfillmentError);
           skipDeliveryEmail = true;
         }
       }
@@ -313,7 +319,7 @@ export async function syncZaloPayTransactions() {
       }
     }
   } catch (error) {
-    console.error('[ZaloPay] Sync error:', error);
+    console.error('[ACB] Sync error:', error);
   } finally {
     isSyncing = false;
   }

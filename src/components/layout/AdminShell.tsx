@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
+  WalletCards,
   Code2,
   FolderKanban,
   Globe2,
@@ -35,6 +36,7 @@ const commerceLinks = [
   { href: '/admin/nso-builder', label: 'Build Ninja School', icon: Hammer },
   { href: '/admin/orders', label: 'Đơn hàng', icon: ShoppingCart },
   { href: '/admin/transactions', label: 'Đối soát nạp tiền', icon: CircleDollarSign },
+  { href: '/admin/payments', label: 'Cấu hình thanh toán', icon: WalletCards },
   { href: '/admin/users', label: 'Khách hàng', icon: Users },
   { href: '/admin/categories', label: 'Danh mục', icon: Tags },
 ];

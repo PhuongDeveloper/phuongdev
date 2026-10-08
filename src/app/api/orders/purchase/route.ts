@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { ensureUserProfile } from '@/lib/auth/ensure-user-profile';
-import { createVietQrUrl, paymentConfig, publicBankDetails } from '@/lib/payments/config';
+import { createVietQrUrl, getPaymentSettings, paymentConfig, publicBankDetails } from '@/lib/payments/config';
 import { createTransactionCode } from '@/lib/payments/transaction-code';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
@@ -149,16 +149,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result?.error || 'Không thể tạo giao dịch.' }, { status: 400 });
     }
 
+    const paymentSettings = await getPaymentSettings();
     return NextResponse.json({
       success: true,
       payment_method: 'bank_qr',
-      qr_url: createVietQrUrl(Number(result.amount), transactionCode),
+      qr_url: createVietQrUrl(Number(result.amount), transactionCode, paymentSettings),
       transaction_code: transactionCode,
       transaction_id: result.transaction_id,
       order_id: result.order_id,
       amount: Number(result.amount),
       expires_at: expiresAt,
-      bank: publicBankDetails(),
+      bank: publicBankDetails(paymentSettings),
     });
   } catch (error) {
     console.error('[Purchase] Unexpected error', error);

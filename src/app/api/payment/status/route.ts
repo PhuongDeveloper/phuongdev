@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fulfillNsoPaymentOrder } from '@/lib/nso-builder/payment';
 import { createClient } from '@/lib/supabase/server';
-import { syncZaloPayTransactions } from '@/lib/payments/zalopay';
+import { syncAcbTransactions } from '@/lib/payments/acb';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
   // Chỉ gọi API ngân hàng khi giao dịch còn chờ; các giao dịch đã hoàn tất trả về ngay.
   if (transaction.status === 'pending') {
-    await syncZaloPayTransactions();
+    await syncAcbTransactions();
     const refreshed = await getTransaction();
     if (refreshed.data) transaction = refreshed.data;
   }
